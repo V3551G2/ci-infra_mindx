@@ -1,0 +1,9 @@
+
+FROM swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_arm:indexSDK_20260515
+COPY /script /script
+RUN mkdir -p /opt/buildtools/volcano_opensource/volcano_1.9
+ENV DEBIAN_FRONTEND=noninteractive
+RUN mkdir -p /opt/buildtools/volcano_opensource/volcano_1.7 \
+&& bash /script/faiss_1.10.0.sh \
+&& cd /opt/buildtools && export GOPROXY="https://goproxy.cn,direct" && export GOPATH=/opt/buildtools/ && go install github.com/axw/gocov/gocov@latest && go install github.com/matm/gocov-html/cmd/gocov-html@latest && go install gotest.tools/gotestsum@latest
+USER root
