@@ -1,53 +1,92 @@
+# syntax=docker/dockerfile:1
 FROM ubuntu:22.04
 
-COPY /script /script
-RUN mkdir -p /opt/buildtools/volcano_opensource/volcano_1.9
-ENV DEBIAN_FRONTEND=noninteractive
-RUN mkdir -p /opt/buildtools/volcano_opensource/volcano_1.7 \
-&& apt-get update \
-&& apt-get -y install texinfo gawk gcc-9 g++-9 unar symlinks git git-lfs wget unzip libffi-dev zlib1g-dev sudo libssl-dev openssl sqlite3 libsqlite3-dev libnuma-dev numactl libpcre2-dev bison flex build-essential automake autoconf libtool libbz2-dev rpm cpio liblzma-dev \
-&& apt-get -y install dos2unix curl vim libc-dev npm nodejs gfortran libgfortran-11-dev libboost-all-dev pkg-config libcapture-tiny-perl libdatetime-perl \
-&& git lfs install \
-&& update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 90 \
-&& update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 90 \
-&& update-alternatives --set gcc /usr/bin/gcc-9 \
-&& update-alternatives --set g++ /usr/bin/g++-9 \
-&& update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 100 \
-&& update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 100 \
-&& cd /opt/buildtools/volcano_opensource/volcano_1.9 && git clone -b v1.9.0 https://gitee.com/mirrors/Volcano.git volcano \
-&& cd /opt/buildtools/volcano_opensource/volcano_1.9/volcano \
-&& cat go.mod \
-&& cd /opt/buildtools/volcano_opensource/volcano_1.7 \
-&& git clone -b v1.7.0 https://gitee.com/mirrors/Volcano.git volcano \
-&& pwd && ls -la ./ && cd ${WORKSPACE} && ls -la ./ \
-&& bash /script/obsutil.sh \
-&& bash /script/python_3.11.4.sh  \
-&& python3 --version \
-&& bash /script/devtoolset-7-gcc_7.3.1-5.16.el7.sh \
-&& bash /script/setuptools_70.3.0.sh  \
-&& bash /script/wheel_0.42.0.sh  \
-&& bash /script/mindspore_2.1.0.sh  \
-&& bash /script/Ascend_HDK_25.3.RC1.B097.sh  \
-&& bash /script/cann_9.0.0.sh  \
-&& bash /script/golang_go_1.24.1.sh \
-&& bash /script/gcc_7.5.0.sh  \
-&& bash /script/make_4.4.1-1.oe2403sp1.sh  \
-&& bash /script/ninja_1.12.0.sh  \
-&& bash /script/swig_4.3.0.sh \
-&& bash /script/cmake_3.28.2.sh  \
-&& bash /script/faiss_1.14.1.sh  \
-&& bash /script/meson_1.5.1.sh  \
-&& bash /script/torch-npu_2.1.0.sh  \
-&& bash /script/googletest_1.11.0.sh  \
-&& bash /script/lcov_2.1.sh  \
-&& cd /opt/buildtools && export GOPROXY="https://goproxy.cn,direct" && export GOPATH=/opt/buildtools/ && go install github.com/axw/gocov/gocov@latest && go install github.com/matm/gocov-html/cmd/gocov-html@latest && go install gotest.tools/gotestsum@latest
-#USER root
+ARG DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
 
-#FROM swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_arm:indexSDK_20260515
-#COPY /script /script
-RUN mkdir -p /opt/buildtools/volcano_opensource/volcano_1.9
-ENV DEBIAN_FRONTEND=noninteractive
-RUN mkdir -p /opt/buildtools/volcano_opensource/volcano_1.7 \
-&& bash /script/faiss_1.10.0.sh \
-&& cd /opt/buildtools && export GOPROXY="https://goproxy.cn,direct" && export GOPATH=/opt/buildtools/ && go install github.com/axw/gocov/gocov@latest && go install github.com/matm/gocov-html/cmd/gocov-html@latest && go install gotest.tools/gotestsum@latest
-USER root
+# ============================================================================
+# 1. 系统基础依赖（一次性装齐 + 立即清理 apt 缓存）
+# ============================================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        texinfo gawk gcc-9 g++-9 unar symlinks git git-lfs wget unzip \
+        libffi-dev zlib1g-dev sudo libssl-dev openssl sqlite3 libsqlite3-dev \
+        libnuma-dev numactl libpcre2-dev bison flex build-essential automake \
+        autoconf libtool libbz2-dev rpm cpio liblzma-dev dos2unix curl vim \
+        libc-dev npm nodejs gfortran libgfortran-11-dev libboost-all-dev \
+        pkg-config libcapture-tiny-perl libdatetime-perl \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 90 \
+    && git lfs install \
+    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 90 \
+    && update-alternatives --set gcc /usr/bin/gcc-9 \
+    && update-alternatives --set g++ /usr/bin/g++-9 \
+    && update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 100 \
+    && update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 100 \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
+WORKDIR /opt/buildtools
+
+# ============================================================================
+# 2. OBS 客户端
+# ============================================================================
+COPY script/obsutil.sh /script/obsutil.sh
+RUN bash /script/obsutil.sh \
+    && rm -f /opt/buildtools/obsutil_linux_*.tar.gz
+
+# ============================================================================
+# 3. Python 3.11.4（自编译，慢，放前便于后续层复用缓存）
+# ============================================================================
+COPY script/python_3.11.4.sh /script/python_3.11.4.sh
+RUN bash /script/python_3.11.4.sh \
+    && rm -rf /root/.cache/pip /opt/buildtools/Python-3.11.4*
+
+# ============================================================================
+# 4. devtoolset-7 / devtoolset-index GCC（IndexSDK 需 gcc4 + gcc7 两个 ABI）
+# ============================================================================
+COPY script/devtoolset-7-gcc_7.3.1-5.16.el7.sh /script/devtoolset-7-gcc_7.3.1-5.16.el7.sh
+RUN bash /script/devtoolset-7-gcc_7.3.1-5.16.el7.sh
+
+# ============================================================================
+# 5. CMake（faiss 编译依赖）
+# ============================================================================
+COPY script/cmake_3.28.2.sh /script/cmake_3.28.2.sh
+RUN bash /script/cmake_3.28.2.sh \
+    && rm -f /opt/buildtools/v3.28.2.tar.gz
+
+# ============================================================================
+# 6. Ascend HDK 驱动 + CANN（NPU 编译必需，build.sh source set_env.sh）
+# ============================================================================
+COPY script/Ascend_HDK_25.3.RC1.B097.sh /script/Ascend_HDK_25.3.RC1.B097.sh
+COPY script/cann_9.0.0.sh /script/cann_9.0.0.sh
+RUN bash /script/Ascend_HDK_25.3.RC1.B097.sh \
+    && bash /script/cann_9.0.0.sh
+
+# ============================================================================
+# 7. torch-npu（2.1.0.post11 配 torch 2.1.0，ivfsp_utils 训练脚本 import torch_npu）
+# ============================================================================
+COPY script/torch-npu_2.1.0.sh /script/torch-npu_2.1.0.sh
+RUN bash /script/torch-npu_2.1.0.sh \
+    && rm -rf /root/.cache/pip
+
+# ============================================================================
+# 8. faiss（1.14.1 + 1.10.0，支持 MULTI_FAISS_PACKAGE 双 ABI）
+# ============================================================================
+COPY script/faiss_1.14.1.sh /script/faiss_1.14.1.sh
+COPY script/faiss_1.10.0.sh /script/faiss_1.10.0.sh
+RUN bash /script/faiss_1.14.1.sh \
+    && bash /script/faiss_1.10.0.sh \
+    && rm -rf /opt/buildtools/OpenBLAS-0.3.10* /root/.cache/pip
+
+# ============================================================================
+# 9. 单元测试工具：googletest / lcov
+# ============================================================================
+COPY script/googletest_1.11.0.sh /script/googletest_1.11.0.sh
+COPY script/lcov_2.1.sh /script/lcov_2.1.sh
+RUN bash /script/googletest_1.11.0.sh \
+    && bash /script/lcov_2.1.sh \
+    && rm -f /opt/buildtools/release-1.11.0.tar.gz
+
+# ============================================================================
+# 10. LLVM / clang-tidy（静态检查工具，官方预编译二进制，解压即用）
+# ============================================================================
+COPY script/llvm_22.1.8.sh /script/llvm_22.1.8.sh
+RUN bash /script/llvm_22.1.8.sh

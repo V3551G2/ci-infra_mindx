@@ -28,7 +28,7 @@ jobs:
           if [ -n "${{ inputs.tag }}" ]; then
             TAGS='["${{ inputs.tag }}"]'
           else
-            TAGS='["indexsdk-x86_64"]'
+            TAGS='["indexsdk-x86_64","indexsdk-aarch64"]'
           fi
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
 

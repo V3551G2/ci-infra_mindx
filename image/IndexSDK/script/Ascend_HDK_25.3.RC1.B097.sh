@@ -2,11 +2,17 @@
 set -eu
 set -o pipefail
 
+case $(uname -m) in
+  x86_64)  HDK_ARCH=x86-64;;
+  aarch64) HDK_ARCH=aarch64;;
+  *) echo "Unsupported arch: $(uname -m)" >&2; exit 1;;
+esac
+
 useradd HwHiAiUser
-wget --no-check-certificate https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/Ascend%20HDK/Ascend%20HDK%2025.3.RC1/Ascend-hdk-310p-npu-driver_25.3.rc1_linux-x86-64.run
-ls Ascend-hdk-310p-npu-driver_25.3.rc1_linux-x86-64.run
+wget --no-check-certificate https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/Ascend%20HDK/Ascend%20HDK%2025.3.RC1/Ascend-hdk-310p-npu-driver_25.3.rc1_linux-${HDK_ARCH}.run
+ls Ascend-hdk-310p-npu-driver_25.3.rc1_linux-${HDK_ARCH}.run
 chmod +x *.run
-echo y |./Ascend-hdk-310p-npu-driver_25.3.rc1_linux-x86-64.run --noexec --extract=/usr/local/Ascend/
+echo y |./Ascend-hdk-310p-npu-driver_25.3.rc1_linux-${HDK_ARCH}.run --noexec --extract=/usr/local/Ascend/
 cp -rf /usr/local/Ascend/driver/lib64/libdcmi.so /usr/local/Ascend/driver/lib64/driver
 chmod +666 /usr/local/Ascend/driver/lib64/driver -R
 echo 'export LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver:$LD_LIBRARY_PATH' >> /etc/profile

@@ -86,3 +86,9 @@ RUN bash /script/googletest_1.11.0.sh \
     && bash /script/mockcpp_2.6.0.sh \
     && bash /script/lcov_2.1.sh \
     && rm -f /opt/buildtools/release-1.11.0.tar.gz /opt/buildtools/mockcpp-2.6.tar.gz
+
+# ============================================================================
+# 10. LLVM / clang-tidy（静态检查工具，官方预编译二进制，解压即用）
+# ============================================================================
+COPY script/llvm_22.1.8.sh /script/llvm_22.1.8.sh
+RUN bash /script/llvm_22.1.8.sh

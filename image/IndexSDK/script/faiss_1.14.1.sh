@@ -4,9 +4,15 @@ install_dir=/opt/buildtools/faiss
 tmp_cpus=$(grep -w processor /proc/cpuinfo|wc -l)
 TMP_PATH=$(pwd)
 
+case $(uname -m) in
+  x86_64)  OPENBLAS_TARGET=ATOM;;
+  aarch64) OPENBLAS_TARGET=ARMV8;;
+  *) echo "Unsupported arch: $(uname -m)" >&2; exit 1;;
+esac
+
 # 安装wheel和build
-apt-get install -y swig
-apt-get install -y python3.10-dev
+apt-get update
+apt-get install -y swig python3.10-dev
 pip3 install wheel
 pip3 install build
 
@@ -18,8 +24,11 @@ echo 'export PATH=/usr/bin:$PATH' >> /etc/profile
 set +eux
 source /etc/profile
 set -eux
-ln -sf /lib/x86_64-linux-gnu/libgfortran.so.5.0.0 /lib/x86_64-linux-gnu/libgfortran.so
-make FC=gfortran USE_OPENMP=1 TARGET=ATOM -j
+if [ ! -f /usr/lib/$(uname -m)-linux-gnu/libgfortran.so ]; then
+  gfortran_lib=$(find /usr/lib/$(uname -m)-linux-gnu -name "libgfortran.so*" 2>/dev/null | head -1)
+  [ -n "$gfortran_lib" ] && ln -sf "$gfortran_lib" /usr/lib/$(uname -m)-linux-gnu/libgfortran.so
+fi
+make FC=gfortran USE_OPENMP=1 TARGET=${OPENBLAS_TARGET} -j
 make install
 sed -i '47 d' /etc/profile
 ln -sf /opt/OpenBLAS/lib/libopenblas.so /usr/lib/libopenblas.so

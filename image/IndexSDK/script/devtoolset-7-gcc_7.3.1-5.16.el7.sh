@@ -4,6 +4,11 @@ set -o pipefail
 source /etc/profile
 os=$(cat /etc/os-release 2>/dev/null | grep ^ID= | awk -F= '{print $2}')
 gcc --version
+case $(uname -m) in
+  x86_64)  DEB_ARCH=amd64;   GCC_TRIPLE=x86_64-pc-linux-gnu;;
+  aarch64) DEB_ARCH=arm64;   GCC_TRIPLE=aarch64-unknown-linux-gnu;;
+  *) echo "Unsupported arch: $(uname -m)" >&2; exit 1;;
+esac
 install_dir=/opt/rh/devtoolset-7
 [ -d "${install_dir}" ] && rm -rf ${install_dir}
 mkdir -p ${install_dir}
@@ -19,10 +24,10 @@ mkdir -p "${install_dir}/${TARGET}"
 cp devtoolset7/depend/*.deb ${install_dir}/${TARGET}
 ls -l ${install_dir}/${TARGET}
 if [ $os == 'ubuntu' ]; then
-  libc_name=libc6_2.17-93ubuntu4_amd64
-  libc_dev_name=libc6-dev_2.17-93ubuntu4_amd64
-  libstdcpp_name=libstdc++6_4.8.2-19ubuntu1_amd64
-  libstdcpp_path=./usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.19
+  libc_name=libc6_2.17-93ubuntu4_${DEB_ARCH}
+  libc_dev_name=libc6-dev_2.17-93ubuntu4_${DEB_ARCH}
+  libstdcpp_name=libstdc++6_4.8.2-19ubuntu1_${DEB_ARCH}
+  libstdcpp_path=./usr/lib/$(uname -m)-linux-gnu/libstdc++.so.6.0.19
   cd "${install_dir}/${TARGET}"
   echo "make dependency on ubuntu"
   if [ ! -f ${libc_name}.deb ]; then
@@ -152,8 +157,8 @@ if [ -f /opt/rh/devtoolset-7/root/usr/include/inttypes.h ];then
   rm -f /opt/rh/devtoolset-7/root/usr/include/inttypes.h
   cp /usr/include/inttypes.h /opt/rh/devtoolset-7/root/usr/include/
 fi
-cp ${install_dir}/${TARGET}-src/root-build/x86_64-pc-linux-gnu/libstdc++-v3/src/.libs/libstdc++_nonshared48.a ${install_dir}/${TARGET}/usr/lib/gcc/x86_64-pc-linux-gnu/7/libstdc++_nonshared.a
-cp ${install_dir}/${TARGET}/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.19 ${install_dir}/${TARGET}/usr/lib/gcc/x86_64-pc-linux-gnu/7/libstdc++.so.6
+cp ${install_dir}/${TARGET}-src/root-build/${GCC_TRIPLE}/libstdc++-v3/src/.libs/libstdc++_nonshared48.a ${install_dir}/${TARGET}/usr/lib/gcc/${GCC_TRIPLE}/7/libstdc++_nonshared.a
+cp ${install_dir}/${TARGET}/usr/lib/$(uname -m)-linux-gnu/libstdc++.so.6.0.19 ${install_dir}/${TARGET}/usr/lib/gcc/${GCC_TRIPLE}/7/libstdc++.so.6
 
 # cp -r /usr/include/fuse ${install_dir}/${TARGET}/usr/include/
 # cp /usr/lib/$(uname -i)-linux-gnu/libfuse.so ${install_dir}/${TARGET}/usr/lib/$(uname -i)-linux-gnu/
@@ -195,10 +200,10 @@ mkdir -p "${install_dir}/${TARGET}"
 cp devtoolset7/depend/*.deb ${install_dir}/${TARGET}
 ls -l ${install_dir}/${TARGET}
 if [ $os == 'ubuntu' ]; then
-  libc_name=libc6_2.17-93ubuntu4_amd64
-  libc_dev_name=libc6-dev_2.17-93ubuntu4_amd64
-  libstdcpp_name=libstdc++6_4.8.2-19ubuntu1_amd64
-  libstdcpp_path=./usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.19
+  libc_name=libc6_2.17-93ubuntu4_${DEB_ARCH}
+  libc_dev_name=libc6-dev_2.17-93ubuntu4_${DEB_ARCH}
+  libstdcpp_name=libstdc++6_4.8.2-19ubuntu1_${DEB_ARCH}
+  libstdcpp_path=./usr/lib/$(uname -m)-linux-gnu/libstdc++.so.6.0.19
   cd "${install_dir}/${TARGET}"
   echo "make dependency on ubuntu"
   if [ ! -f ${libc_name}.deb ]; then
