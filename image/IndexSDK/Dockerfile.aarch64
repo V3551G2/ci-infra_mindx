@@ -1,6 +1,50 @@
+FROM ubuntu:22.04
 
-FROM swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_arm:indexSDK_20260515
 COPY /script /script
+RUN mkdir -p /opt/buildtools/volcano_opensource/volcano_1.9
+ENV DEBIAN_FRONTEND=noninteractive
+RUN mkdir -p /opt/buildtools/volcano_opensource/volcano_1.7 \
+&& apt-get update \
+&& apt-get -y install texinfo gawk gcc-9 g++-9 unar symlinks git git-lfs wget unzip libffi-dev zlib1g-dev sudo libssl-dev openssl sqlite3 libsqlite3-dev libnuma-dev numactl libpcre2-dev bison flex build-essential automake autoconf libtool libbz2-dev rpm cpio liblzma-dev \
+&& apt-get -y install dos2unix curl vim libc-dev npm nodejs gfortran libgfortran-11-dev libboost-all-dev pkg-config libcapture-tiny-perl libdatetime-perl \
+&& git lfs install \
+&& update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 90 \
+&& update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 90 \
+&& update-alternatives --set gcc /usr/bin/gcc-9 \
+&& update-alternatives --set g++ /usr/bin/g++-9 \
+&& update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 100 \
+&& update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 100 \
+&& cd /opt/buildtools/volcano_opensource/volcano_1.9 && git clone -b v1.9.0 https://gitee.com/mirrors/Volcano.git volcano \
+&& cd /opt/buildtools/volcano_opensource/volcano_1.9/volcano \
+&& cat go.mod \
+&& cd /opt/buildtools/volcano_opensource/volcano_1.7 \
+&& git clone -b v1.7.0 https://gitee.com/mirrors/Volcano.git volcano \
+&& pwd && ls -la ./ && cd ${WORKSPACE} && ls -la ./ \
+&& bash /script/obsutil.sh \
+&& bash /script/python_3.11.4.sh  \
+&& python3 --version \
+&& bash /script/devtoolset-7-gcc_7.3.1-5.16.el7.sh \
+&& bash /script/setuptools_70.3.0.sh  \
+&& bash /script/wheel_0.42.0.sh  \
+&& bash /script/mindspore_2.1.0.sh  \
+&& bash /script/Ascend_HDK_25.3.RC1.B097.sh  \
+&& bash /script/cann_9.0.0.sh  \
+&& bash /script/golang_go_1.24.1.sh \
+&& bash /script/gcc_7.5.0.sh  \
+&& bash /script/make_4.4.1-1.oe2403sp1.sh  \
+&& bash /script/ninja_1.12.0.sh  \
+&& bash /script/swig_4.3.0.sh \
+&& bash /script/cmake_3.28.2.sh  \
+&& bash /script/faiss_1.14.1.sh  \
+&& bash /script/meson_1.5.1.sh  \
+&& bash /script/torch-npu_2.1.0.sh  \
+&& bash /script/googletest_1.11.0.sh  \
+&& bash /script/lcov_2.1.sh  \
+&& cd /opt/buildtools && export GOPROXY="https://goproxy.cn,direct" && export GOPATH=/opt/buildtools/ && go install github.com/axw/gocov/gocov@latest && go install github.com/matm/gocov-html/cmd/gocov-html@latest && go install gotest.tools/gotestsum@latest
+#USER root
+
+#FROM swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_arm:indexSDK_20260515
+#COPY /script /script
 RUN mkdir -p /opt/buildtools/volcano_opensource/volcano_1.9
 ENV DEBIAN_FRONTEND=noninteractive
 RUN mkdir -p /opt/buildtools/volcano_opensource/volcano_1.7 \
