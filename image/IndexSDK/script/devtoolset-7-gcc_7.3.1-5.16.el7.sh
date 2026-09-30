@@ -13,7 +13,7 @@ install_dir=/opt/rh/devtoolset-7
 [ -d "${install_dir}" ] && rm -rf ${install_dir}
 mkdir -p ${install_dir}
 wget https://aoe-flow.obs.cn-north-4.myhuaweicloud.com:443/inference/dockerfile/devtoolset7.zip
-unzip devtoolset7.zip
+unzip -q devtoolset7.zip
 ls
 cp -r devtoolset7/src/* ${install_dir}
 TARGET=root
@@ -35,7 +35,7 @@ if [ $os == 'ubuntu' ]; then
   fi
   unar "${libc_name}.deb"
   ls -l ${libc_name}
-  tar -C "${install_dir}/${TARGET}" -xvf "${libc_name}/data.tar.gz" && \
+  tar -C "${install_dir}/${TARGET}" -xf "${libc_name}/data.tar.gz" && \
   rm -rf "${libc_name}.deb" "${libc_name}"
 
   if [ ! -f "${libc_dev_name}.deb" ]; then
@@ -43,7 +43,7 @@ if [ $os == 'ubuntu' ]; then
   fi
   unar "${libc_dev_name}.deb"
   ls -l ${libc_dev_name}
-  tar -C "${install_dir}/${TARGET}" -xvf "${libc_dev_name}/data.tar.gz" && \
+  tar -C "${install_dir}/${TARGET}" -xf "${libc_dev_name}/data.tar.gz" && \
   rm -rf "${libc_dev_name}.deb" "${libc_dev_name}"
 
   ln -s  "/usr/include/linux/" "${install_dir}/${TARGET}/usr/include/linux"
@@ -78,7 +78,7 @@ cp ${install_dir}/devtoolset-7-gcc-7.3.1-5.16.el7.src.rpm "${TARGET}-src"
 # Build a devtoolset cross-compiler based on our glibc 2.12 sysroot setup.
 cd "${TARGET}-src"
 echo "step1: release devtoolset pkg."
-rpm2cpio "devtoolset-7-gcc-7.3.1-5.16.el7.src.rpm" |cpio -idmv
+rpm2cpio "devtoolset-7-gcc-7.3.1-5.16.el7.src.rpm" |cpio -idm
 
 echo "step2: release gcc pkg."
 tar -xjf "gcc-7.3.1-20180303.tar.bz2" --strip 1
@@ -189,7 +189,7 @@ install_dir=/opt/rh/devtoolset-index
 [ -d "${install_dir}" ] && rm -rf ${install_dir}
 mkdir -p ${install_dir}
 wget https://aoe-flow.obs.cn-north-4.myhuaweicloud.com:443/inference/dockerfile/devtoolset7.zip
-unzip devtoolset7.zip
+unzip -q devtoolset7.zip
 ls
 cp -r devtoolset7/src/* ${install_dir}
 TARGET=root
@@ -211,7 +211,7 @@ if [ $os == 'ubuntu' ]; then
   fi
   unar "${libc_name}.deb"
   ls -l ${libc_name}
-  tar -C "${install_dir}/${TARGET}" -xvf "${libc_name}/data.tar.gz" && \
+  tar -C "${install_dir}/${TARGET}" -xf "${libc_name}/data.tar.gz" && \
   rm -rf "${libc_name}.deb" "${libc_name}"
 
   if [ ! -f "${libc_dev_name}.deb" ]; then
@@ -219,7 +219,7 @@ if [ $os == 'ubuntu' ]; then
   fi
   unar "${libc_dev_name}.deb"
   ls -l ${libc_dev_name}
-  tar -C "${install_dir}/${TARGET}" -xvf "${libc_dev_name}/data.tar.gz" && \
+  tar -C "${install_dir}/${TARGET}" -xf "${libc_dev_name}/data.tar.gz" && \
   rm -rf "${libc_dev_name}.deb" "${libc_dev_name}"
 
   ln -s  "/usr/include/linux/" "${install_dir}/${TARGET}/usr/include/linux"
@@ -254,7 +254,7 @@ cp ${install_dir}/devtoolset-7-gcc-7.3.1-5.16.el7.src.rpm "${TARGET}-src"
 # Build a devtoolset cross-compiler based on our glibc 2.12 sysroot setup.
 cd "${TARGET}-src"
 echo "step1: release devtoolset pkg."
-rpm2cpio "devtoolset-7-gcc-7.3.1-5.16.el7.src.rpm" |cpio -idmv
+rpm2cpio "devtoolset-7-gcc-7.3.1-5.16.el7.src.rpm" |cpio -idm
 
 echo "step2: release gcc pkg."
 tar -xjf "gcc-7.3.1-20180303.tar.bz2" --strip 1

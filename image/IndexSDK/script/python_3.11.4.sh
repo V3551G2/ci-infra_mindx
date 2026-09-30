@@ -40,77 +40,69 @@ cat << EOF >> ~/.pip/pip.conf
 index-url = https://repo.huaweicloud.com/repository/pypi/simple
 trusted-host = repo.huaweicloud.com
 timeout = 120
+disable-pip-version-check = true
 EOF
-pip3 install pytest
-pip3 install pytest-html
-pip3 install coverage
-pip3 install pyfakefs
-pip3 install pyyaml
-pip3 install faker
-pip3 install tox
-pip3 install asynctest
-pip3 install pytest
-pip3 install pytest-asyncio
-pip3 install pytest-html
-pip3 install pytest-cov
-pip3 install pytest-mock
-pip3 install hypothesis
-pip3 install grpcio>=1.62.2
-pip3 install pyOpenSSL
-pip3 install protobuf>=4.24.4
-pip3 install transformers
-pip3 install pylatexenc
-pip3 install openai
-pip3 install sentence-transformers
-pip3 install hydra-core
-pip3 install tensordict
-pip3 install word2number
-pip3 install codetiming
+pip3 install -q pytest
+pip3 install -q pytest-html
+pip3 install -q coverage
+pip3 install -q pyfakefs
+pip3 install -q pyyaml
+pip3 install -q faker
+pip3 install -q tox
+pip3 install -q asynctest
+pip3 install -q pytest-asyncio
+pip3 install -q pytest-cov
+pip3 install -q pytest-mock
+pip3 install -q hypothesis
+pip3 install -q grpcio>=1.62.2
+pip3 install -q pyOpenSSL
+pip3 install -q protobuf>=4.24.4
+pip3 install -q transformers
+pip3 install -q pylatexenc
+pip3 install -q openai
+pip3 install -q sentence-transformers
+pip3 install -q hydra-core
+pip3 install -q tensordict
+pip3 install -q word2number
+pip3 install -q codetiming
 
 # 安装python第三方库
-pip3 install coverage
-pip3 install regex
-pip3 install html-testRunner
-pip3 install xmlrunner
-pip3 install requests
-pip3 install pyinstaller==4.0
+pip3 install -q regex
+pip3 install -q html-testRunner
+pip3 install -q xmlrunner
+pip3 install -q requests
+pip3 install -q pyinstaller==4.0
 
-pip3.11 install --upgrade pip
-pip3 install coverage
-pip3 install regex
-pip3 install pyyaml
-pip3 install html-testRunner
-pip3 install xmlrunner
-pip3 install pipenv
-pip3 install requests
-pip3 install wheel
-pip3 install setuptools==70.3.0
-pip3 install numpy==1.26.4
-pip3 install psutil
-pip3 install jinja2
-pip3 install pydot
-pip3 install GitPython
-pip3 install urllib3==1.26.5
+pip3.11 install -q --upgrade pip
+pip3 install -q pipenv
+pip3 install -q wheel
+pip3 install -q setuptools==70.3.0
+pip3 install -q numpy==1.26.4
+pip3 install -q psutil
+pip3 install -q jinja2
+pip3 install -q pydot
+pip3 install -q GitPython
+pip3 install -q urllib3==1.26.5
 
-pip3 install decorator
-pip3 install sympy
-pip3 install scipy
-pip3 install attrs
-pip3 install opencv-python
-pip3 list
+pip3 install -q decorator
+pip3 install -q sympy
+pip3 install -q scipy
+pip3 install -q attrs
+pip3 install -q opencv-python
+pip3 list --format=freeze | wc -l
 
-pip3 install pandas==1.5.3
-pip3 install ply==3.11
-pip3 install joblib==1.4.2
+pip3 install -q pandas==1.5.3
+pip3 install -q ply==3.11
+pip3 install -q joblib==1.4.2
 
 # AgentSDK
-pip3 install pyzmq==27.1.0
-pip3 install starlette==0.48.0
-pip3 install msgspec==0.19.0
-pip3 install blake3==1.0.8
-pip3 install fastapi==0.119.0
-pip3 install aiohttp==3.13.0
-pip3 install py-cpuinfo==9.0.0
-pip3 install partial_json_parser==0.2.1.1.post6
-pip3 install prometheus_client==0.23.1
-pip3 install gguf==0.17.1
+pip3 install -q pyzmq==27.1.0
+pip3 install -q starlette==0.48.0
+pip3 install -q msgspec==0.19.0
+pip3 install -q blake3==1.0.8
+pip3 install -q fastapi==0.119.0
+pip3 install -q aiohttp==3.13.0
+pip3 install -q py-cpuinfo==9.0.0
+pip3 install -q partial_json_parser==0.2.1.1.post6
+pip3 install -q prometheus_client==0.23.1
+pip3 install -q gguf==0.17.1

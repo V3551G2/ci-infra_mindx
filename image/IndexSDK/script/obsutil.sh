@@ -17,7 +17,7 @@ ls obsutil_linux_${DEB_ARCH}.tar.gz
 
 # clear
 [ -d "${install_dir}" ] && rm -rf ${install_dir}
-tar -zxvf obsutil_linux_${DEB_ARCH}.tar.gz
+tar -zxf obsutil_linux_${DEB_ARCH}.tar.gz
 ls -al
 cd  ./obsutil_linux_${DEB_ARCH}_*
 ! [[ -h ~/bin/obsutil ]] && ln -sf /opt/buildtools/obsutil_linux_${DEB_ARCH}_*/obsutil /usr/bin/obsutil

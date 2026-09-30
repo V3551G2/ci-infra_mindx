@@ -40,8 +40,8 @@ mkdir -p ${install_dir}
 install_action="install"
 tar xzf faiss-1.10.0.tar.gz
 
-pip3 install --upgrade pip
-pip3 install numpy
+pip3 install -q --upgrade pip
+pip3 install -q numpy
 
 cd faiss-1.10.0/faiss
 arch="$(uname -m)"

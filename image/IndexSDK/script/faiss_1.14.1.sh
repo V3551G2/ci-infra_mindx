@@ -13,8 +13,8 @@ esac
 # 安装wheel和build
 apt-get update
 apt-get install -y swig python3.10-dev
-pip3 install wheel
-pip3 install build
+pip3 install -q wheel
+pip3 install -q build
 
 #安装OpenBLAS
 wget https://github.com/xianyi/OpenBLAS/archive/v0.3.10.tar.gz -O OpenBLAS-0.3.10.tar.gz
@@ -47,8 +47,8 @@ mkdir -p ${install_dir}
 install_action="install"
 tar xzf faiss-1.14.1.tar.gz
 
-pip3 install --upgrade pip
-pip3 install numpy
+pip3 install -q --upgrade pip
+pip3 install -q numpy
 
 cd faiss-1.14.1/faiss
 arch="$(uname -m)"

@@ -23,6 +23,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 100 \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
+# wget 静默下载（仅保留错误信息，不打印点状进度），避免依赖下载进度刷爆构建日志
+RUN printf 'verbose = off\n' > /root/.wgetrc
+
 WORKDIR /opt/buildtools
 
 # ============================================================================
