@@ -1,0 +1,22 @@
+# Build context = image/IndexSDK/
+# 仅 script/*.sh 会经 COPY 进入镜像，其余文件一律不发送给 Docker daemon，
+# 以减小 build context 体积、加速构建。
+
+# 构建脚本本身（仅在构建机使用，不进镜像）
+docker_build.sh
+
+# Git 元数据与占位文件
+.git
+.gitignore
+.gitkeep
+
+# 文档 / 报告（与镜像无关）
+*.md
+
+# IDE 与系统临时文件
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
