@@ -23,8 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 100 \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
-# wget 静默下载（progress=none 关闭点状进度、仅保留错误信息），避免依赖下载进度刷爆构建日志
-RUN printf 'progress = none\n' > /root/.wgetrc
+# wget 静默下载（quiet=on 关闭点状进度以精简日志；失败仍返回非0退出码，配合 set -x 可定位失败 URL）
+RUN printf 'quiet = on\n' > /root/.wgetrc
 
 WORKDIR /opt/buildtools
 

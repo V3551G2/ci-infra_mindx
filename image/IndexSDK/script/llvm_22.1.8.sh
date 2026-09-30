@@ -16,8 +16,8 @@ DOWNLOAD_URL="https://mindcluster.obs.cn-north-4.myhuaweicloud.com/blueImageDepe
 # 备用：GitHub 官方 release（OBS 不可用时替换为下行）
 # DOWNLOAD_URL="https://github.com/llvm/llvm-project/releases/download/${LLVM_TAG}/${PKG_NAME}"
 
-# 带重试的稳健下载（--progress=none 静默下载仅保留错误；--read-timeout 防连接僵死）
-wget --tries=5 --timeout=60 --read-timeout=60 --waitretry=10 --progress=none "${DOWNLOAD_URL}"
+# 带重试的稳健下载（全局 wgetrc 已设 quiet=on 静默；--read-timeout 防连接僵死）
+wget --tries=5 --timeout=60 --read-timeout=60 --waitretry=10 "${DOWNLOAD_URL}"
 
 # 解压并合并到 /usr/local：bin 落到 /usr/local/bin（默认已在 PATH），即刻全局可用
 tar -Jxf "${PKG_NAME}" --strip-components=1 -C /usr/local
