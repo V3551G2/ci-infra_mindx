@@ -78,10 +78,29 @@ jobs:
           REMOTE_IMAGE="${{ env.REGISTRY }}/${{ env.SWR_ORG }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
           docker tag "${IMAGE_TAG}" "${REMOTE_IMAGE}"
           if [ "$SWR_LOGIN_OK" = "true" ]; then
-            docker push "${REMOTE_IMAGE}"
-            mkdir -p /tmp/result
-            echo "${REMOTE_IMAGE}" > "/tmp/result/${{ matrix.tag }}.txt"
-            echo "Pushed ${REMOTE_IMAGE}"
+            # 大镜像跨境 push 容易挂死：单次 push 设 30min 超时并自动重试。
+            # docker push 支持层断点续传（已推层直接 Layer already exists），重试代价低。
+            echo "Pushing ${REMOTE_IMAGE} (max 5 attempts, 30min timeout each)..."
+            PUSH_OK=false
+            for attempt in 1 2 3 4 5; do
+              echo "::group::Push attempt ${attempt}/5"
+              if timeout 1800 docker push "${REMOTE_IMAGE}"; then
+                PUSH_OK=true
+                echo "::endgroup::"
+                break
+              fi
+              echo "::endgroup::"
+              echo "::warning::Push attempt ${attempt} failed or timed out, retrying..."
+              sleep 15
+            done
+            if [ "${PUSH_OK}" = "true" ]; then
+              mkdir -p /tmp/result
+              echo "${REMOTE_IMAGE}" > "/tmp/result/${{ matrix.tag }}.txt"
+              echo "Pushed ${REMOTE_IMAGE}"
+            else
+              echo "::error::Push failed after 5 attempts: ${REMOTE_IMAGE}"
+              exit 1
+            fi
           else
             echo "::warning::Skipped push because SWR login failed"
           fi

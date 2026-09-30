@@ -11,13 +11,13 @@ case $(uname -m) in
   *) echo "Unsupported arch: $(uname -m)" >&2; exit 1;;
 esac
 
-# 优先使用原始 GitHub 下载链接
-DOWNLOAD_URL="https://github.com/llvm/llvm-project/releases/download/${LLVM_TAG}/${PKG_NAME}"
-# 备用：内网 OBS 链接（GitHub 下载失败/过慢时替换为下行）
-# DOWNLOAD_URL="https://mindcluster.obs.cn-north-4.myhuaweicloud.com/blueImageDependency/clang-tidy/${LLVM_VERSION}/${PKG_NAME}"
+# 主用：内网 OBS 高速稳定链接（GitHub 跨境下载易挂起，改走内网源）
+DOWNLOAD_URL="https://mindcluster.obs.cn-north-4.myhuaweicloud.com/blueImageDependency/clang-tidy/${LLVM_VERSION}/${PKG_NAME}"
+# 备用：GitHub 官方 release（OBS 不可用时替换为下行）
+# DOWNLOAD_URL="https://github.com/llvm/llvm-project/releases/download/${LLVM_TAG}/${PKG_NAME}"
 
-# 带重试的稳健下载（应对跨境网络抖动）
-wget --tries=3 --timeout=30 --waitretry=10 "${DOWNLOAD_URL}"
+# 带重试的稳健下载（--progress=none 静默下载仅保留错误；--read-timeout 防连接僵死）
+wget --tries=5 --timeout=60 --read-timeout=60 --waitretry=10 --progress=none "${DOWNLOAD_URL}"
 
 # 解压并合并到 /usr/local：bin 落到 /usr/local/bin（默认已在 PATH），即刻全局可用
 tar -Jxf "${PKG_NAME}" --strip-components=1 -C /usr/local
