@@ -34,9 +34,11 @@ rm -rf /tmp/llvm-staging/share
 # CMake 构建配置
 rm -rf /tmp/llvm-staging/lib/cmake
 # 命令行工具只保留 clang / clang++ / clang-tidy
+# 注意：官方包中 clang/clang++ 是软链，指向带版本号的真实二进制（如 clang-22），
+# 必须同时保留这些版本化文件，否则软链断裂导致 clang: command not found
 for f in /tmp/llvm-staging/bin/*; do
   case "$(basename "$f")" in
-    clang|clang++|clang-tidy) ;;
+    clang|clang++|clang-tidy|clang-[0-9]*|clang++-[0-9]*|clang-tidy-[0-9]*) ;;
     *) rm -rf "$f" ;;
   esac
 done
