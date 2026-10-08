@@ -9,7 +9,7 @@ shift
 
 case "$tag" in
   # --- v2.13.0 ---
-  recsdk-x86_64
+  recsdk-x86_64)
     ARCH=x86_64
     ;;
   recsdk-aarch64)

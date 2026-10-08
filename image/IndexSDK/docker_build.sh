@@ -9,7 +9,7 @@ shift
 
 case "$tag" in
   # --- v2.13.0 ---
-  indexsdk-x86_64
+  indexsdk-x86_64)
     ARCH=x86_64
     ;;
   indexsdk-aarch64)
