@@ -71,6 +71,7 @@ jobs:
       - name: Build and push image
         run: |
           TIMESTAMP=$(date -u +%Y%m%d%H%M)
+          #TODO
           #cd image/IndexSDK
           cd image/RAGSDK
           chmod +x ./docker_build.sh
