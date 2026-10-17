@@ -28,7 +28,8 @@ jobs:
           if [ -n "${{ inputs.tag }}" ]; then
             TAGS='["${{ inputs.tag }}"]'
           else
-            TAGS='["indexsdk-x86_64","indexsdk-aarch64"]'
+            # TAGS='["indexsdk-x86_64","indexsdk-aarch64"]'
+            TAGS='["ragsdk-x86_64","ragsdk-aarch64"]'
           fi
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
 
@@ -70,7 +71,8 @@ jobs:
       - name: Build and push image
         run: |
           TIMESTAMP=$(date -u +%Y%m%d%H%M)
-          cd image/IndexSDK
+          #cd image/IndexSDK
+          cd image/RAGSDK
           chmod +x ./docker_build.sh
           TIMESTAMP=${TIMESTAMP} ./docker_build.sh ${{ matrix.tag }}
 

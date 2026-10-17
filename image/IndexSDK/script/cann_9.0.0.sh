@@ -13,6 +13,10 @@ unzip -q Ascend-cann-device-sdk_9.0.0_linux-aarch64.zip
 chmod +x *.run
 echo y | ./cann-runtime-9.0.0-minios.aarch64.run --full --quiet --install-path=/usr/local/AscendMiniOs
 echo y | ./cann-runtime-9.0.0-minios.aarch64.run --full --quiet --install-path=/usr/local/AscendMiniOSRun
+# 观测 minios 单份体积：两个路径大小应一致（相同 run 包重复安装），用于评估去重收益
+echo "---- minios install size ----"
+du -sh /usr/local/AscendMiniOs
+du -sh /usr/local/AscendMiniOSRun
 
 set +eux
 source /etc/profile
