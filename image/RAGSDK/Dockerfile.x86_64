@@ -104,10 +104,15 @@ COPY script/golang_go_1.22.1.sh /script/golang_go_1.22.1.sh
 RUN bash /script/golang_go_1.22.1.sh \
     && rm -f /opt/buildtools/go1.22.1.linux-amd64.tar.gz
 
+# Volcano 源码：原用 gitee 镜像（gitee.com/mirrors/Volcano.git），偶发 401 限流报
+# "could not read Username"，故改用 GitHub 官方源（tags v1.7.0/v1.9.0 与 gitee 镜像一致）。
+# 原 gitee 做法保留备查：
+#   git clone --depth 1 -b v1.9.0 https://gitee.com/mirrors/Volcano.git /opt/buildtools/volcano_opensource/volcano_1.9/volcano
+#   git clone --depth 1 -b v1.7.0 https://gitee.com/mirrors/Volcano.git /opt/buildtools/volcano_opensource/volcano_1.7/volcano
 RUN mkdir -p /opt/buildtools/volcano_opensource/volcano_1.9 \
               /opt/buildtools/volcano_opensource/volcano_1.7 \
-    && git clone --depth 1 -b v1.9.0 https://gitee.com/mirrors/Volcano.git /opt/buildtools/volcano_opensource/volcano_1.9/volcano \
-    && git clone --depth 1 -b v1.7.0 https://gitee.com/mirrors/Volcano.git /opt/buildtools/volcano_opensource/volcano_1.7/volcano \
+    && git clone --depth 1 -b v1.9.0 https://github.com/volcano-sh/volcano.git /opt/buildtools/volcano_opensource/volcano_1.9/volcano \
+    && git clone --depth 1 -b v1.7.0 https://github.com/volcano-sh/volcano.git /opt/buildtools/volcano_opensource/volcano_1.7/volcano \
     && export GOPROXY="https://goproxy.cn,direct" \
     && export GOPATH=/opt/buildtools \
     && go install github.com/axw/gocov/gocov@latest \
@@ -129,8 +134,8 @@ RUN bash /script/googletest_1.11.0.sh \
 # ============================================================================
 COPY script/models.sh /script/models.sh
 COPY script/obsutil.sh /script/obsutil.sh
-RUN bash /script/models.sh \
-    && bash /script/obsutil.sh \
+# models.sh 暂时注释：VisionSDK 仓库 'out' 分支已删除，待确认测试模型正确来源后恢复
+RUN bash /script/obsutil.sh \
     && rm -f /opt/buildtools/obsutil_linux_amd64.tar.gz
 
 USER root
