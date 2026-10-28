@@ -4,6 +4,7 @@
 # 用途：为 Ascend/mind-cluster 的 ascend-faultdiag 组件提供 Python 单元测试环境
 # 依赖依据：component/ascend-faultdiag 的 src/requirements.txt、test/requirements.txt、
 #           build/build.sh 以及 .gitcode/workflows/.ut_faultdiag_python.yml
+# 1
 # =====================================================================
 FROM ubuntu:22.04
 
