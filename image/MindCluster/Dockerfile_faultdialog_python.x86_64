@@ -1,0 +1,56 @@
+# syntax=docker/dockerfile:1
+# =====================================================================
+# 门禁镜像：faultdiag python 模块测试环境（UT）
+# 用途：为 Ascend/mind-cluster 的 ascend-faultdiag 组件提供 Python 单元测试环境
+# 依赖依据：component/ascend-faultdiag 的 src/requirements.txt、test/requirements.txt、
+#           build/build.sh 以及 .gitcode/workflows/.ut_faultdiag_python.yml
+# =====================================================================
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
+
+# ---------------------------------------------------------------------
+# 1. 系统基础依赖：一次性装齐 + 立即清理 apt 缓存
+#    仅保留测试环境所需：git/下载工具/dos2unix + Python 3.11 自编译依赖
+# ---------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        git \
+        wget \
+        curl \
+        unzip \
+        dos2unix \
+        ca-certificates \
+        file \
+        xz-utils \
+        libffi-dev \
+        zlib1g-dev \
+        libssl-dev \
+        libsqlite3-dev \
+        libbz2-dev \
+        liblzma-dev \
+        libnuma-dev \
+        numactl \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
+# wget 静默下载（保留报错信息，仅关闭点状进度输出）
+RUN printf 'quiet = on\n' > /root/.wgetrc
+
+WORKDIR /opt/buildtools
+
+# ---------------------------------------------------------------------
+# 2. Python 3.11.4（自编译，耗时最长，放前便于后续层复用构建缓存）
+# ---------------------------------------------------------------------
+COPY script/python_3.11.4.sh /script/python_3.11.4.sh
+RUN bash /script/python_3.11.4.sh \
+    && rm -rf /root/.cache/pip /opt/buildtools/Python-3.11.4*
+
+# ---------------------------------------------------------------------
+# 3. OBS 客户端（构建产物上传工具）
+# ---------------------------------------------------------------------
+COPY script/obsutil.sh /script/obsutil.sh
+RUN bash /script/obsutil.sh \
+    && rm -f /opt/buildtools/obsutil_linux_amd64.tar.gz
+
+USER root
