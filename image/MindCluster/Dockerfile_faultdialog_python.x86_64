@@ -12,8 +12,9 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
 
 # ---------------------------------------------------------------------
-# 1. 系统基础依赖：一次性装齐 + 立即清理 apt 缓存
+# 1. 系统基础依赖：一次性装齐 + 清理 apt 缓存
 #    仅保留测试环境所需：git/下载工具/dos2unix + Python 3.11 自编译依赖
+#    注意：必须保留 /var/lib/apt/lists 索引，UT 脚本会在运行时 apt-get install
 # ---------------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
@@ -33,7 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         liblzma-dev \
         libnuma-dev \
         numactl \
-    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+    && rm -rf /var/cache/apt/*
 
 # wget 静默下载（保留报错信息，仅关闭点状进度输出）
 RUN printf 'quiet = on\n' > /root/.wgetrc
