@@ -1,4 +1,4 @@
-name: Build build/test Docker Images
+name: Build MindX build/test Docker Images
 
 on:
   workflow_dispatch:
