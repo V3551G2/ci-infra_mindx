@@ -21,18 +21,74 @@ jobs:
   matrix:
     runs-on: ubuntu-latest
     outputs:
-      tags: ${{ steps.set.outputs.tags }}
+      matrix: ${{ steps.set.outputs.matrix }}
     steps:
-      - id: set
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine images to build
+        id: set
+        env:
+          TAG_INPUT: ${{ inputs.tag }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
         run: |
-          if [ -n "${{ inputs.tag }}" ]; then
-            TAGS='["${{ inputs.tag }}"]'
-          else
-            # TAGS='["indexsdk-x86_64","indexsdk-aarch64"]'
-            #TAGS='["ragsdk-x86_64","ragsdk-aarch64"]'
-            TAGS='["mindcluster-ut_faultdialog_python-x86_64"]'
-          fi
-          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+
+          # 子目录 -> 该仓可构建的 tag 全集（与各仓 image/<dir>/docker_build.sh 的 case 保持一致）
+          DIR_TAGS = {
+              "IndexSDK": ["indexsdk-x86_64", "indexsdk-aarch64"],
+              "RAGSDK": ["ragsdk-x86_64", "ragsdk-aarch64"],
+              "MindCluster": ["mindcluster-ut_faultdialog_python-x86_64"],
+              "RecSDK": ["recsdk-x86_64", "recsdk-aarch64"],
+          }
+
+          tag_input = os.environ.get("TAG_INPUT", "")
+          before = os.environ.get("BEFORE", "")
+          after = os.environ.get("AFTER", "")
+
+          # tag -> 子目录 反查表
+          tag_to_dir = {t: d for d, tags in DIR_TAGS.items() for t in tags}
+
+          if tag_input:
+              # workflow_dispatch 指定单个 tag
+              if tag_input not in tag_to_dir:
+                  print(f"::error::Unknown tag: {tag_input}")
+                  sys.exit(1)
+              target_dirs = [tag_to_dir[tag_input]]
+          elif before and after and before != "0" * 40:
+              # push：根据本次 push 改动的 image/<dir> 子目录自动确定
+              try:
+                  output = subprocess.check_output(
+                      ["git", "diff", "--name-only", before, after]
+                  ).decode()
+                  changed = set()
+                  for line in output.splitlines():
+                      parts = line.split("/")
+                      if len(parts) >= 2 and parts[0] == "image" and parts[1] in DIR_TAGS:
+                          changed.add(parts[1])
+                  target_dirs = sorted(changed)
+              except Exception:
+                  target_dirs = []
+              # 未命中任何 image 子目录（例如只改了 workflow 文件）时回退到全量
+              if not target_dirs:
+                  target_dirs = list(DIR_TAGS.keys())
+          else:
+              # workflow_dispatch 未指定 tag：全量
+              target_dirs = list(DIR_TAGS.keys())
+
+          matrix = [{"tag": t, "dir": d} for d in target_dirs for t in DIR_TAGS[d]]
+          data = json.dumps(matrix)
+          print(f"Build matrix: {data}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"matrix={data}\n")
+          PY
 
   build:
     needs: matrix
@@ -41,7 +97,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tag: ${{ fromJSON(needs.matrix.outputs.tags) }}
+        include: ${{ fromJSON(needs.matrix.outputs.matrix) }}
     runs-on: ${{ contains(matrix.tag, 'x86_64') && 'ubuntu-latest' || 'ubuntu-22.04-arm' }}
     steps:
       - name: Free up disk space
@@ -72,10 +128,7 @@ jobs:
       - name: Build and push image
         run: |
           TIMESTAMP=$(date -u +%Y%m%d%H%M)
-          #TODO
-          #cd image/IndexSDK
-          #cd image/RAGSDK
-          cd image/MindCluster
+          cd image/${{ matrix.dir }}
           chmod +x ./docker_build.sh
           TIMESTAMP=${TIMESTAMP} ./docker_build.sh ${{ matrix.tag }}
 
