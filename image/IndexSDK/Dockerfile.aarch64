@@ -64,30 +64,14 @@ RUN bash /script/Ascend_HDK_25.3.RC1.B097.sh \
     && bash /script/cann_9.0.0.sh
 
 # ============================================================================
-# 7. torch-npu（2.1.0.post11 配 torch 2.1.0，ivfsp_utils 训练脚本 import torch_npu）
-# ============================================================================
-COPY script/torch-npu_2.1.0.sh /script/torch-npu_2.1.0.sh
-RUN bash /script/torch-npu_2.1.0.sh \
-    && rm -rf /root/.cache/pip
-
-# ============================================================================
-# 8. faiss（1.14.1，arm 原始仅装此版本，不引入 1.10.0）
+# 7. faiss（1.14.1，arm 原始仅装此版本，不引入 1.10.0）
 # ============================================================================
 COPY script/faiss_1.14.1.sh /script/faiss_1.14.1.sh
 RUN bash /script/faiss_1.14.1.sh \
     && rm -rf /opt/buildtools/OpenBLAS-0.3.10* /root/.cache/pip
 
 # ============================================================================
-# 9. 单元测试工具：googletest / lcov
-# ============================================================================
-COPY script/googletest_1.11.0.sh /script/googletest_1.11.0.sh
-COPY script/lcov_2.1.sh /script/lcov_2.1.sh
-RUN bash /script/googletest_1.11.0.sh \
-    && bash /script/lcov_2.1.sh \
-    && rm -f /opt/buildtools/release-1.11.0.tar.gz
-
-# ============================================================================
-# 10. LLVM / clang-tidy（静态检查工具，官方预编译二进制，解压即用）
+# 8. LLVM / clang-tidy（静态检查工具，官方预编译二进制，解压即用）
 # ============================================================================
 COPY script/llvm_22.1.8.sh /script/llvm_22.1.8.sh
 RUN bash /script/llvm_22.1.8.sh
