@@ -42,67 +42,22 @@ trusted-host = repo.huaweicloud.com
 timeout = 120
 disable-pip-version-check = true
 EOF
-pip3 install -q pytest
-pip3 install -q pytest-html
-pip3 install -q coverage
-pip3 install -q pyfakefs
+
+# 安装构建工具
+pip3 install -q --upgrade pip
+pip3 install -q wheel setuptools==70.3.0
+
+# 对齐源码仓 requirement.txt（numpy/decorator/sympy/pyyaml/protobuf/scipy/requests/attrs/psutil）
+# + 源码实际 import 的 joblib（feature_retrieval/.../graph_build.py）
 pip3 install -q pyyaml
-pip3 install -q faker
-pip3 install -q tox
-pip3 install -q asynctest
-pip3 install -q pytest-asyncio
-pip3 install -q pytest-cov
-pip3 install -q pytest-mock
-pip3 install -q hypothesis
-pip3 install -q grpcio>=1.62.2
-pip3 install -q pyOpenSSL
 pip3 install -q protobuf>=4.24.4
-pip3 install -q transformers
-pip3 install -q pylatexenc
-pip3 install -q openai
-pip3 install -q sentence-transformers
-pip3 install -q hydra-core
-pip3 install -q tensordict
-pip3 install -q word2number
-pip3 install -q codetiming
-
-# 安装python第三方库
-pip3 install -q regex
-pip3 install -q html-testRunner
-pip3 install -q xmlrunner
 pip3 install -q requests
-pip3 install -q pyinstaller==4.0
-
-pip3.11 install -q --upgrade pip
-pip3 install -q pipenv
-pip3 install -q wheel
-pip3 install -q setuptools==70.3.0
 pip3 install -q numpy==1.26.4
 pip3 install -q psutil
-pip3 install -q jinja2
-pip3 install -q pydot
-pip3 install -q GitPython
-pip3 install -q urllib3==1.26.5
-
 pip3 install -q decorator
 pip3 install -q sympy
 pip3 install -q scipy
 pip3 install -q attrs
-pip3 install -q opencv-python
-pip3 list --format=freeze | wc -l
-
-pip3 install -q pandas==1.5.3
-pip3 install -q ply==3.11
 pip3 install -q joblib==1.4.2
 
-# AgentSDK
-pip3 install -q pyzmq==27.1.0
-pip3 install -q starlette==0.48.0
-pip3 install -q msgspec==0.19.0
-pip3 install -q blake3==1.0.8
-pip3 install -q fastapi==0.119.0
-pip3 install -q aiohttp==3.13.0
-pip3 install -q py-cpuinfo==9.0.0
-pip3 install -q partial_json_parser==0.2.1.1.post6
-pip3 install -q prometheus_client==0.23.1
-pip3 install -q gguf==0.17.1
+pip3 list --format=freeze | wc -l
