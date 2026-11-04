@@ -10,10 +10,17 @@ ls Python-3.11.4.tgz
 mkdir -p ${install_dir}
 tar -xf Python-3.11.4.tgz
 cd Python-3.11.4/
-./configure --prefix=${install_dir} --enable-shared
+./configure --prefix=${install_dir} --enable-shared --disable-test-modules
+make clean || make distclean
 make -j ${tmp_cpus}
-make clean
 make install
+# 精简产物：删除测试套件、静态库及无关标准库模块
+rm -rf ${install_dir}/lib/python3.11/test \
+       ${install_dir}/lib/python3.11/lib2to3 \
+       ${install_dir}/lib/python3.11/idlelib \
+       ${install_dir}/lib/python3.11/tkinter \
+       ${install_dir}/lib/python3.11/turtledemo
+find ${install_dir} -name 'libpython3.11.a' -delete
 sed -i '/PYTHON_HOME/d' /etc/profile
 echo "export PYTHON_HOME=${install_dir}" >> /etc/profile
 source /etc/profile
