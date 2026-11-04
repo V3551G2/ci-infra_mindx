@@ -18,6 +18,7 @@ pushd CMake-3.28.2
 ./configure --prefix=${install_dir}
 make -j ${tmp_cpus}
 make install
+rm -rf ${install_dir}/share/cmake-3.28/Help ${install_dir}/share/man
 popd
 rm -rf CMake-3.28.2
 
