@@ -4,25 +4,13 @@ set -o pipefail
 
 wget --no-check-certificate https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/CANN%209.0.0/Ascend-cann-toolkit_9.0.0_linux-$(uname -m).run
 wget --no-check-certificate https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/CANN%209.0.0/Ascend-cann-910b-ops_9.0.0_linux-$(uname -m).run
-wget --no-check-certificate https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/CANN%209.0.0/Ascend-cann-nnal_9.0.0_linux-$(uname -m).run
 chmod +x *.run
 echo y | ./Ascend-cann-toolkit_9.0.0_linux-$(uname -m).run --install --force
-
-wget --no-check-certificate https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/CANN%209.0.0/Ascend-cann-device-sdk_9.0.0_linux-aarch64.zip
-unzip -q Ascend-cann-device-sdk_9.0.0_linux-aarch64.zip
-chmod +x *.run
-echo y | ./cann-runtime-9.0.0-minios.aarch64.run --full --quiet --install-path=/usr/local/AscendMiniOs
-echo y | ./cann-runtime-9.0.0-minios.aarch64.run --full --quiet --install-path=/usr/local/AscendMiniOSRun
-# 观测 minios 单份体积：两个路径大小应一致（相同 run 包重复安装），用于评估去重收益
-echo "---- minios install size ----"
-du -sh /usr/local/AscendMiniOs
-du -sh /usr/local/AscendMiniOSRun
 
 set +eux
 source /etc/profile
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 set -eux
-echo y | ./Ascend-cann-nnal_9.0.0_linux-$(uname -m).run --install --install-path=/usr/local/Ascend
 echo y | ./Ascend-cann-910b-ops_9.0.0_linux-$(uname -m).run --install --install-path=/usr/local/Ascend
 
 ls -l /usr/local/Ascend
