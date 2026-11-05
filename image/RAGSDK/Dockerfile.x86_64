@@ -6,6 +6,8 @@ ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
 
 # ============================================================================
 # 1. 系统基础依赖（一次性装齐 + 立即清理 apt 缓存）
+#    RAGSDK 编译为纯 Python wheel 打包（setup.py bdist_wheel），无 C/C++/Go/NPU
+#    编译步骤，仅需 Python 解释器 + 常用 shell 打包工具（git/unzip/patch 等）。
 # ============================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
         texinfo gawk gcc-9 g++-9 unar symlinks git wget unzip \
@@ -28,113 +30,16 @@ RUN printf 'verbose = off\n' > /root/.wgetrc
 WORKDIR /opt/buildtools
 
 # ============================================================================
-# 2. Python 3.11.4（自编译，慢，放前便于后续层复用缓存）
+# 2. Python 3.11.4（自编译，RAGSDK 编译仅需 Python 解释器 + setuptools/wheel）
 # ============================================================================
 COPY script/python_3.11.4.sh /script/python_3.11.4.sh
 RUN bash /script/python_3.11.4.sh \
     && rm -rf /root/.cache/pip /opt/buildtools/Python-3.11.4*
 
 # ============================================================================
-# 3. devtoolset-7 / devtoolset-index GCC（两个 ABI 的交叉编译工具链）
+# 3. OBS 客户端（制品上传）
 # ============================================================================
-COPY script/devtoolset-7-gcc_7.3.1-5.16.el7.sh /script/devtoolset-7-gcc_7.3.1-5.16.el7.sh
-RUN bash /script/devtoolset-7-gcc_7.3.1-5.16.el7.sh \
-    && rm -rf /opt/buildtools/devtoolset7 /opt/buildtools/devtoolset7.zip \
-              /script/devtoolset7 /script/devtoolset7.zip
-
-# ============================================================================
-# 4. GCC 7.5.0（源码编译，独立工具链）
-# ============================================================================
-COPY script/gcc_7.5.0.sh /script/gcc_7.5.0.sh
-RUN bash /script/gcc_7.5.0.sh
-
-# ============================================================================
-# 5. CMake（源码编译，faiss 编译依赖）
-# ============================================================================
-COPY script/cmake_3.28.2.sh /script/cmake_3.28.2.sh
-RUN bash /script/cmake_3.28.2.sh \
-    && rm -f /opt/buildtools/v3.28.2.tar.gz
-
-# ============================================================================
-# 6. 构建工具链：make / ninja / swig / meson
-# ============================================================================
-COPY script/make_4.4.1-1.oe2403sp1.sh /script/make_4.4.1-1.oe2403sp1.sh
-COPY script/ninja_1.12.0.sh /script/ninja_1.12.0.sh
-COPY script/swig_4.3.0.sh /script/swig_4.3.0.sh
-COPY script/meson_1.5.1.sh /script/meson_1.5.1.sh
-RUN bash /script/make_4.4.1-1.oe2403sp1.sh \
-    && bash /script/ninja_1.12.0.sh \
-    && bash /script/swig_4.3.0.sh \
-    && bash /script/meson_1.5.1.sh \
-    && rm -f /opt/buildtools/ninja-1.12.0.tar.gz /opt/buildtools/meson-1.5.1.tar.gz
-
-# ============================================================================
-# 7. Ascend HDK 驱动 + CANN（NPU 编译必需）
-# ============================================================================
-COPY script/Ascend_HDK_25.3.RC1.B097.sh /script/Ascend_HDK_25.3.RC1.B097.sh
-COPY script/cann_8.3.RC2.B030.sh /script/cann_8.3.RC2.B030.sh
-RUN bash /script/Ascend_HDK_25.3.RC1.B097.sh \
-    && bash /script/cann_8.3.RC2.B030.sh
-
-# ============================================================================
-# 8. torch-npu（2.1.0.post11 配 torch 2.1.0 CPU 版）
-# ============================================================================
-COPY script/torch-npu_2.1.0.sh /script/torch-npu_2.1.0.sh
-RUN bash /script/torch-npu_2.1.0.sh \
-    && rm -rf /root/.cache/pip
-
-# ============================================================================
-# 9. faiss（1.10.0 + OpenBLAS）
-# ============================================================================
-COPY script/faiss_1.10.0.sh /script/faiss_1.10.0.sh
-RUN bash /script/faiss_1.10.0.sh \
-    && rm -rf /opt/buildtools/OpenBLAS-0.3.10* /root/.cache/pip
-
-# ============================================================================
-# 10. MindSpore Lite
-# ============================================================================
-COPY script/mindspore_2.1.0.sh /script/mindspore_2.1.0.sh
-RUN bash /script/mindspore_2.1.0.sh \
-    && rm -f /opt/buildtools/mindspore-lite-2.1.0-linux-x64.tar.gz
-
-# ============================================================================
-# 11. Go 工具链 + Volcano 源码 + go 测试工具（gocov / gotestsum）
-# ============================================================================
-COPY script/golang_go_1.22.1.sh /script/golang_go_1.22.1.sh
-RUN bash /script/golang_go_1.22.1.sh \
-    && rm -f /opt/buildtools/go1.22.1.linux-amd64.tar.gz
-
-# Volcano 源码：原用 gitee 镜像（gitee.com/mirrors/Volcano.git），偶发 401 限流报
-# "could not read Username"，故改用 GitHub 官方源（tags v1.7.0/v1.9.0 与 gitee 镜像一致）。
-# 原 gitee 做法保留备查：
-#   git clone --depth 1 -b v1.9.0 https://gitee.com/mirrors/Volcano.git /opt/buildtools/volcano_opensource/volcano_1.9/volcano
-#   git clone --depth 1 -b v1.7.0 https://gitee.com/mirrors/Volcano.git /opt/buildtools/volcano_opensource/volcano_1.7/volcano
-RUN mkdir -p /opt/buildtools/volcano_opensource/volcano_1.9 \
-              /opt/buildtools/volcano_opensource/volcano_1.7 \
-    && git clone --depth 1 -b v1.9.0 https://github.com/volcano-sh/volcano.git /opt/buildtools/volcano_opensource/volcano_1.9/volcano \
-    && git clone --depth 1 -b v1.7.0 https://github.com/volcano-sh/volcano.git /opt/buildtools/volcano_opensource/volcano_1.7/volcano \
-    && export GOPROXY="https://goproxy.cn,direct" \
-    && export GOPATH=/opt/buildtools \
-    && go install github.com/axw/gocov/gocov@latest \
-    && go install github.com/matm/gocov-html/cmd/gocov-html@latest \
-    && go install gotest.tools/gotestsum@latest \
-    && rm -rf /root/.cache/go-build /opt/buildtools/pkg/mod
-
-# ============================================================================
-# 12. 单元测试工具：googletest / mockcpp
-# ============================================================================
-COPY script/googletest_1.11.0.sh /script/googletest_1.11.0.sh
-COPY script/mockcpp_2.6.0.sh /script/mockcpp_2.6.0.sh
-RUN bash /script/googletest_1.11.0.sh \
-    && bash /script/mockcpp_2.6.0.sh \
-    && rm -f /opt/buildtools/release-1.11.0.tar.gz /opt/buildtools/mockcpp-2.6.tar.gz
-
-# ============================================================================
-# 13. 测试模型数据 + OBS 客户端
-# ============================================================================
-COPY script/models.sh /script/models.sh
 COPY script/obsutil.sh /script/obsutil.sh
-# models.sh 暂时注释：VisionSDK 仓库 'out' 分支已删除，待确认测试模型正确来源后恢复
 RUN bash /script/obsutil.sh \
     && rm -f /opt/buildtools/obsutil_linux_amd64.tar.gz
 
