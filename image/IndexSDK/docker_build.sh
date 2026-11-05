@@ -15,6 +15,9 @@ case "$tag" in
   indexsdk-aarch64)
     ARCH=aarch64
     ;;
+  indexsdk-ut_cpp-x86_64)
+    ARCH=ut_cpp.x86_64
+    ;;
   *)
     echo "Unknown tag: ${tag}"
     exit 1
