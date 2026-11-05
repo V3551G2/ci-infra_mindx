@@ -7,6 +7,7 @@ set -ex
 tag="${1:?Usage: $0 <TAG>}"
 shift
 
+supplement=""
 case "$tag" in
   # --- v2.13.0 ---
   indexsdk-x86_64)
@@ -16,7 +17,8 @@ case "$tag" in
     ARCH=aarch64
     ;;
   indexsdk-ut_cpp-x86_64)
-    ARCH=ut_cpp.x86_64
+    ARCH=x86_64
+    supplement=_ut_cpp
     ;;
   *)
     echo "Unknown tag: ${tag}"
@@ -25,7 +27,7 @@ case "$tag" in
 esac
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DOCKERFILE="${SCRIPT_DIR}/Dockerfile.${ARCH}"
+DOCKERFILE="${SCRIPT_DIR}/Dockerfile${supplement}.${ARCH}"
 echo "===DOCKERFILE: ${DOCKERFILE}"
 
 if [[ ! -f "${DOCKERFILE}" ]]; then
