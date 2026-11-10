@@ -42,10 +42,6 @@ timeout = 120
 disable-pip-version-check = true
 EOF
 
-if [ "${PYTHON_MINIMAL:-0}" = "1" ]; then
-    # 精简模式：仅保留打包工具，测试依赖由仓库 tests/run_py_test.sh 运行时安装
-    pip3 install -q wheel setuptools==70.3.0
-else
 # 测试/构建基础依赖
 pip3 install -q pytest
 pip3 install -q pytest-html
@@ -120,4 +116,3 @@ pip3 install -q py-cpuinfo==9.0.0
 pip3 install -q partial_json_parser==0.2.1.1.post6
 pip3 install -q prometheus_client==0.23.1
 pip3 install -q gguf==0.17.1
-fi

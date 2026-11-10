@@ -2,7 +2,8 @@
 # UT_python 任务镜像
 # 入口: RAGSDK/.gitcode/workflows/.ut_python.yml -> tests/run_py_test.sh
 # UT 用例全部通过 mock / tests/fake_package 隔离外部依赖，无 C/C++/Go/NPU 编译，
-# 也不需要 CANN/HDK/torch-npu；依赖范围按 run_py_test.sh + requirements.txt 实际需求收敛。
+# 也不需要 CANN/HDK/torch-npu；但 Python 依赖环境必须与编译镜像保持一致
+# （同一份 script/python_3.11.4.sh），否则任务期要从零安装 requirements.txt。
 FROM ubuntu:22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -19,7 +20,7 @@ ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
 # ============================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates git wget curl unzip \
-        build-essential pkg-config \
+        build-essential gfortran pkg-config \
         zlib1g-dev libssl-dev libffi-dev libbz2-dev liblzma-dev libsqlite3-dev \
         libpq-dev libglib2.0-0 libgl1 libgomp1 libgfortran5 libnuma1 \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
@@ -30,12 +31,11 @@ RUN printf 'verbose = off\n' > /root/.wgetrc
 WORKDIR /opt/buildtools
 
 # ============================================================================
-# 2. Python 3.11.4（复用原 script/python_3.11.4.sh）
-#    PYTHON_MINIMAL=1: 只装解释器 + pip + setuptools/wheel，跳过 UT 不用的
-#    torch/torchvision/transformers/ray 等预装包（run_py_test.sh 运行时自己安装）。
+# 2. Python 3.11.4（复用编译镜像同一份 script/python_3.11.4.sh）
+#    完整预装 torch(CPU)/transformers/sentence-transformers/numpy/scipy 等，
+#    与编译镜像保持一致的依赖环境，避免任务期重复从零下载。
 # ============================================================================
 COPY script/python_3.11.4.sh /script/python_3.11.4.sh
-ENV PYTHON_MINIMAL=1
 ENV PATH=/opt/buildtools/python-3.11.4/bin:${PATH}
 RUN bash /script/python_3.11.4.sh \
     && rm -rf /root/.cache/pip /opt/buildtools/Python-3.11.4*
