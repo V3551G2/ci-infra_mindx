@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1
+# UT_python 任务镜像
+# 入口: RAGSDK/.gitcode/workflows/.ut_python.yml -> tests/run_py_test.sh
+# UT 用例全部通过 mock / tests/fake_package 隔离外部依赖，无 C/C++/Go/NPU 编译，
+# 也不需要 CANN/HDK/torch-npu；依赖范围按 run_py_test.sh + requirements.txt 实际需求收敛。
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
+
+# ============================================================================
+# 1. 系统依赖（Python 源码编译 + pip 构建扩展 + UT 运行时动态库，一次装齐并清理）
+#    - build-essential/pkg-config/各 -dev: 编译 Python 3.11 及 psycopg2 等源码包
+#    - libsqlite3-dev: sqlite 相关用例（python sqlite3 模块）
+#    - libpq-dev: psycopg2 / opengauss 依赖
+#    - libglib2.0-0/libgl1: opencv-python 运行时；libGLdispatch 供 LD_PRELOAD
+#    - libgomp1/libgfortran5: torch/scipy 运行时库
+#    - git/ca-certificates: 流水线 clone 仓库；wget: run_py_test.sh 下载 torch wheel
+# ============================================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates git wget curl unzip \
+        build-essential pkg-config \
+        zlib1g-dev libssl-dev libffi-dev libbz2-dev liblzma-dev libsqlite3-dev \
+        libpq-dev libglib2.0-0 libgl1 libgomp1 libgfortran5 libnuma1 \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
+# wget 静默下载（verbose=off 取消点状进度但保留报错，不影响问题定位）
+RUN printf 'verbose = off\n' > /root/.wgetrc
+
+WORKDIR /opt/buildtools
+
+# ============================================================================
+# 2. Python 3.11.4（复用原 script/python_3.11.4.sh）
+#    PYTHON_MINIMAL=1: 只装解释器 + pip + setuptools/wheel，跳过 UT 不用的
+#    torch/torchvision/transformers/ray 等预装包（run_py_test.sh 运行时自己安装）。
+# ============================================================================
+COPY script/python_3.11.4.sh /script/python_3.11.4.sh
+ENV PYTHON_MINIMAL=1
+ENV PATH=/opt/buildtools/python-3.11.4/bin:${PATH}
+RUN bash /script/python_3.11.4.sh \
+    && rm -rf /root/.cache/pip /opt/buildtools/Python-3.11.4*
+
+USER root

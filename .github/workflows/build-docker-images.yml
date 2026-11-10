@@ -44,7 +44,7 @@ jobs:
           # 子目录 -> 该仓可构建的 tag 全集（与各仓 image/<dir>/docker_build.sh 的 case 保持一致）
           DIR_TAGS = {
               "IndexSDK": ["indexsdk-x86_64", "indexsdk-aarch64", "indexsdk-ut_cpp-x86_64"],
-              "RAGSDK": ["ragsdk-x86_64", "ragsdk-aarch64"],
+              "RAGSDK": ["ragsdk-x86_64", "ragsdk-aarch64", "ragsdk-ut_python-x86_64"],
               "MindCluster": ["mindcluster-ut_faultdialog_python-x86_64"],
               "RecSDK": ["recsdk-x86_64", "recsdk-aarch64"],
           }
