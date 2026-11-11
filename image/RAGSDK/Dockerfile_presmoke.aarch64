@@ -1,0 +1,68 @@
+# syntax=docker/dockerfile:1
+# Presmoke 任务镜像（aarch64）
+# 入口: RAGSDK/.gitcode/workflows/.presmoke.yml(PreSmoke) -> build/run_presmoke.sh
+#   运行环境: runs-on [self-hosted, ragsdk, npu=1]，镜像 tag 形如 mindx_arm:SDK_*
+#   任务期由流水线/脚本自行完成: apt install postgresql libpq-dev、
+#   pip install uvicorn / pytest* / "torch-npu==2.10.0 torchvision==0.25.0 numpy<2"、
+#   安装 mxRag run 包并 pip install 其 requirements.txt，最后跑 tests/presmoke/*。
+#   故镜像只需提供: 基础 OS + Python3.11.4 + CANN(ascend-toolkit set_env.sh + 310P 算子)
+#   + git/wget 等基础工具。驱动 /usr/local/Ascend/driver 由宿主机 -v 挂载
+#   (见 RAGSDK/docker/OVERVIEW.zh.md)，镜像不再内置 HDK 驱动。
+#   与编译镜像同理，RAGSDK 无 C/C++/Go/NPU 编译，故不装 gcc7.5/devtoolset/cmake/ninja/
+#   swig/meson/faiss/googletest/golang/lcov/mindspore/torch-npu(2.1.0)/volcano 等冗余组件。
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
+
+# ============================================================================
+# 1. 系统依赖（Python 源码编译 + pip 构建扩展 + 运行时动态库，一次装齐并清理）
+#    - build-essential/gcc-9/pkg-config/各 -dev: 编译 Python3.11 及 psycopg2 等源码包
+#    - libpq-dev: psycopg2 / opengauss（任务期也会 apt 安装，这里预置省时）
+#    - libnuma-dev/numactl: torch_npu 运行时
+#    - libglib2.0-0/libgl1: opencv-python 运行时；libgomp1/libgfortran5: torch/scipy 运行时
+#    - git: 流水线 clone 与 run_presmoke.sh 的 git diff
+# ============================================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates git wget curl unzip \
+        build-essential gcc-9 g++-9 gfortran pkg-config \
+        zlib1g-dev libssl-dev libffi-dev libbz2-dev liblzma-dev libsqlite3-dev \
+        libpq-dev libnuma-dev numactl libgomp1 libgfortran5 \
+        libglib2.0-0 libgl1 \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 90 \
+    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 90 \
+    && update-alternatives --set gcc /usr/bin/gcc-9 \
+    && update-alternatives --set g++ /usr/bin/g++-9 \
+    && update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 100 \
+    && update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 100 \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
+# wget 静默下载（verbose=off 取消点状进度但保留报错，不影响问题定位）
+RUN printf 'verbose = off\n' > /root/.wgetrc
+
+WORKDIR /opt/buildtools
+
+# ============================================================================
+# 2. Python 3.11.4（复用编译/UT 镜像同一份脚本，已含 pytest/pytest-cov/pytest-html 等测试框架）
+# ============================================================================
+COPY script/python_3.11.4.sh /script/python_3.11.4.sh
+ENV PATH=/opt/buildtools/python-3.11.4/bin:${PATH}
+RUN bash /script/python_3.11.4.sh \
+    && rm -rf /root/.cache/pip /opt/buildtools/Python-3.11.4*
+
+# ============================================================================
+# 3. 预装 presmoke 运行时 pip 依赖（对齐 build/run_presmoke.sh 的固定版本，避免任务期重复下载）
+#    注意: mxRag 包自身的 requirements.txt 位于 run 包内，无法在镜像构建期预装，
+#    任务期 run_presmoke.sh 仍会执行 pip install -r 安装。
+# ============================================================================
+RUN pip3 install -q uvicorn pytest pytest-cov pytest-html \
+    && pip3 install -q "torch-npu==2.10.0" "torchvision==0.25.0" "numpy<2" \
+    && rm -rf /root/.cache/pip
+
+# ============================================================================
+# 4. CANN（presmoke 需 source ascend-toolkit/set_env.sh，并在 310P 上执行算子）
+# ============================================================================
+COPY script/cann_8.3.RC2.B030.sh /script/cann_8.3.RC2.B030.sh
+RUN bash /script/cann_8.3.RC2.B030.sh
+
+USER root

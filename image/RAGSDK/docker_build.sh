@@ -19,6 +19,10 @@ case "$tag" in
     ARCH=x86_64
     supplement=_ut_python
     ;;
+  ragsdk-presmoke-aarch64)
+    ARCH=aarch64
+    supplement=_presmoke
+    ;;
   *)
     echo "Unknown tag: ${tag}"
     exit 1
