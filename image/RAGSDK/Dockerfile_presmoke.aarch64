@@ -65,4 +65,18 @@ RUN pip3 install -q uvicorn pytest pytest-cov pytest-html \
 COPY script/cann_8.3.RC2.B030.sh /script/cann_8.3.RC2.B030.sh
 RUN bash /script/cann_8.3.RC2.B030.sh
 
+# ============================================================================
+# 5. 任务期 pip 全局版本约束（不新增依赖、不增镜像体积）
+#    背景: build/run_presmoke.sh 先 pip install -r mxRag/requirements.txt(未 pin)，
+#    再 pip install "torch-npu==2.10.0" "torchvision==0.25.0" "numpy<2"。
+#    前者如今会解析到 numpy2 世代(pandas 3.x / opencv-python 5.x / umap-learn 0.6.x)，
+#    随后被 numpy<2 强制降级 → pandas 导入失败:
+#    "Please upgrade numpy to >= 2.0.2 to use this pandas version"。
+#    这里用 PIP_CONSTRAINT 把任务期解析锚定在 numpy<2 世代(pandas 2.x/opencv 4.x 等)，
+#    与脚本自身的 numpy<2 自洽。仅约束版本，不装任何额外包。
+#    注意: 必须置于镜像自身 pip 安装之后，避免影响构建期安装。
+# ============================================================================
+RUN printf 'numpy<2\n' > /opt/pip-constraints.txt
+ENV PIP_CONSTRAINT=/opt/pip-constraints.txt
+
 USER root
