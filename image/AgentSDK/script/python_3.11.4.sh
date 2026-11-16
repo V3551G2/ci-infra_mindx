@@ -63,7 +63,7 @@ EOF
 
 # ---- 1. 打包与构建工具 ----
 pip3 install -q --upgrade pip
-pip3 install -q wheel setuptools==70.3.0 pyinstaller==4.0 pipenv
+pip3 install -q wheel setuptools==70.3.0
 
 # ---- 2. 单元测试框架（aura_ut.sh / openclaw_ut.sh 依赖预装的 pytest 系列）----
 pip3 install -q pytest pytest-asyncio pytest-cov pytest-html pytest-mock coverage \
