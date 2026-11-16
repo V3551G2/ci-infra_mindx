@@ -47,6 +47,7 @@ jobs:
               "RAGSDK": ["ragsdk-x86_64", "ragsdk-aarch64", "ragsdk-ut_python-x86_64", "ragsdk-presmoke-aarch64"],
               "MindCluster": ["mindcluster-ut_faultdialog_python-x86_64"],
               "RecSDK": ["recsdk-x86_64", "recsdk-aarch64"],
+              "AgentSDK": ["agentsdk-aarch64"],
           }
 
           tag_input = os.environ.get("TAG_INPUT", "")

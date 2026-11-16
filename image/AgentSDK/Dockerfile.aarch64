@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1
+# =============================================================================
+# AgentSDK 门禁编译镜像（aarch64）
+#
+# 用途：
+#   1) GitCode 门禁 Build_arm：script/compile.sh（python3 打 wheel）+ build_run.sh（makeself 打包）
+#   2) CodeArts 夜间构建：obsutil 上传产物
+#
+# 说明：AgentSDK 编译/打包为纯 Python 流程，不依赖 CANN/HDK 与 C/C++ 工具链，
+#       故本镜像仅保留 Python 3.11 + 打包工具 + 基础命令，移除了继承自通用镜像的
+#       CANN/HDK、devtoolset/gcc、faiss/OpenBLAS、go/volcano、mindspore、cmake/ninja/swig 等冗余组件。
+# =============================================================================
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
+
+# =============================================================================
+# 1. 系统基础依赖（一次性装齐 + 立即清理 apt 缓存）
+#    仅保留：下载解压（git/wget/curl/unzip/tar/patch）与编译 Python 所需的依赖头文件
+# =============================================================================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git wget curl unzip patch ca-certificates \
+        build-essential libffi-dev zlib1g-dev libssl-dev \
+        libbz2-dev liblzma-dev libsqlite3-dev libc-dev \
+        dos2unix vim \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
+# wget 静默下载（关闭点状进度以精简日志；失败仍返回非 0，配合 set -x 可定位 URL）
+RUN printf 'quiet = on\n' > /root/.wgetrc
+
+WORKDIR /opt/buildtools
+
+# =============================================================================
+# 2. Python 3.11.4（自编译，慢，放前便于后续层复用缓存）
+# =============================================================================
+COPY script/python_3.11.4.sh /script/python_3.11.4.sh
+RUN bash /script/python_3.11.4.sh \
+    && rm -rf /root/.cache/pip /opt/buildtools/Python-3.11.4*
+
+# =============================================================================
+# 3. OBS 客户端（CodeArts 夜间构建上传产物用）
+# =============================================================================
+COPY script/obsutil.sh /script/obsutil.sh
+RUN bash /script/obsutil.sh \
+    && rm -f /opt/buildtools/obsutil_linux_arm64.tar.gz
