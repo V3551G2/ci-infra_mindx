@@ -35,7 +35,7 @@ ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
 # =============================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc-9 g++-9 build-essential make pkg-config \
-        automake autoconf libtool bison flex swig sudo \
+        automake autoconf libtool bison flex sudo \
         git wget curl unzip tar patch dos2unix vim ca-certificates \
         libffi-dev zlib1g-dev libssl-dev openssl \
         libbz2-dev liblzma-dev libsqlite3-dev libc-dev libpcre2-dev \
