@@ -48,6 +48,7 @@ jobs:
               "MindCluster": ["mindcluster-ut_faultdialog_python-x86_64"],
               "RecSDK": ["recsdk-x86_64", "recsdk-aarch64"],
               "AgentSDK": ["agentsdk-aarch64", "agentsdk-ut-x86_64"],
+              "MultimodalSDK": ["multimodalsdk-aarch64"],
           }
 
           tag_input = os.environ.get("TAG_INPUT", "")
