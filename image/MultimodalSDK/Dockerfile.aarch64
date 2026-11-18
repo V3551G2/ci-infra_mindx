@@ -40,6 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libffi-dev zlib1g-dev libssl-dev openssl \
         libbz2-dev liblzma-dev libsqlite3-dev libc-dev libpcre2-dev \
         libnuma-dev numactl \
+        libcapture-tiny-perl libdatetime-perl \
     && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 90 \
     && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 90 \
     && update-alternatives --set gcc /usr/bin/gcc-9 \
