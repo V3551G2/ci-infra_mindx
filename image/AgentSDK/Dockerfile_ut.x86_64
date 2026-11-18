@@ -1,0 +1,60 @@
+# syntax=docker/dockerfile:1
+# =============================================================================
+# AgentSDK UT_python 任务镜像（x86_64）
+#
+# 任务入口（AgentSDK 仓库）：
+#   .gitcode/workflows/PR-pipeline_agentsdk.yml
+#     -> .gitcode/workflows/.ut_python.yml（JOB_UT，container image = 本镜像）
+#         UT_python_aura     -> script/aura_ut.sh
+#         UT_python_openclaw -> script/openclaw_ut.sh
+#
+# 真实依赖（依据上述 workflow 与两个 UT 脚本识别）：
+#   1) Python 3.11.4（/opt/buildtools/python-3.11.4），UT 脚本以
+#      `python3 -m pytest --cov ...` 运行；pytest / pytest-cov / pytest-html /
+#      pytest-asyncio / coverage 需预装（aura_ut.sh、openclaw_ut.sh 依赖预装 pytest 系列）。
+#   2) git / wget / curl：workflow 克隆被测仓库、第三方库（Megatron/MindSpeed/vllm 等）
+#      及 UT 脚本运行期 pip install 所需。
+#   3) libgomp1 / libgfortran5 / libnuma1：torch、scipy、scikit-learn 运行期动态库。
+#
+#   用例通过 mock（torch / vllm / megatron / ray / pydantic / requests ... 均以
+#   sys.modules 打桩）隔离外部依赖，且 UT 脚本自身在运行期 pip install 所需 python 包，
+#   因此镜像无需 CANN / HDK / torch-npu / mindspore / faiss / golang / gcc 工具链 /
+#   cmake / ninja / swig / meson / googletest / mockcpp / volcano 等
+#   C/C++/Go/NPU 编译链——相比通用镜像大幅瘦身并显著缩短构建时间。
+#
+# Python 环境复用编译镜像同一份 script/python_3.11.4.sh，保证与门禁编译环境一致，
+# 避免任务期从零安装依赖。
+# =============================================================================
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
+
+# -----------------------------------------------------------------------------
+# 1. 系统基础依赖：一次性装齐 + 立即清理 apt 缓存
+#    - build-essential/gfortran/pkg-config/各 -dev：编译 Python 3.11 与 pip 源码包
+#    - libgomp1/libgfortran5/libnuma1：torch/scipy/scikit-learn 运行时动态库
+#    - git/wget/curl/unzip/ca-certificates：克隆仓库与 pip 下载
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates git wget curl unzip \
+        build-essential gfortran pkg-config \
+        zlib1g-dev libssl-dev libffi-dev libbz2-dev liblzma-dev libsqlite3-dev \
+        libgomp1 libgfortran5 libnuma1 \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
+# wget 静默下载（关闭点状进度日志，失败仍返回非 0 便于定位 URL）
+RUN printf 'quiet = on\n' > /root/.wgetrc
+
+WORKDIR /opt/buildtools
+
+# -----------------------------------------------------------------------------
+# 2. Python 3.11.4（自编译，耗时最长，放前便于后续层复用构建缓存）
+#    复用编译镜像同一份 script/python_3.11.4.sh：预装 pytest 系列与 AgentSDK 运行时依赖
+# -----------------------------------------------------------------------------
+COPY script/python_3.11.4.sh /script/python_3.11.4.sh
+ENV PATH=/opt/buildtools/python-3.11.4/bin:${PATH}
+RUN bash /script/python_3.11.4.sh \
+    && rm -rf /root/.cache/pip /opt/buildtools/Python-3.11.4*
+
+USER root

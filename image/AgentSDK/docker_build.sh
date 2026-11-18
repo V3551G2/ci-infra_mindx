@@ -12,6 +12,10 @@ case "$tag" in
   agentsdk-aarch64)
     ARCH=aarch64
     ;;
+  agentsdk-ut-x86_64)
+    ARCH=x86_64
+    supplement=_ut
+    ;;
   *)
     echo "Unknown tag: ${tag}"
     exit 1
