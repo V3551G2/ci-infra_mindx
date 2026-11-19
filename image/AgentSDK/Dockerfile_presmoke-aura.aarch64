@@ -74,7 +74,7 @@ ENV PATH=/opt/buildtools/python-3.11.4/bin:${PATH}
 # 在 `set -u` 下引用未绑定的 PYTHONPATH 会直接失败（line 58: PYTHONPATH: unbound variable）。
 # 旧 Ascend 基础镜像已定义该变量，精简镜像需显式定义一个空值，保持与旧镜像一致的行为。
 ENV PYTHONPATH=""
-RUN bash /script/python-3.11.4_presmoke.sh \
+RUN bash /script/python_3.11.4_presmoke.sh \
     && rm -rf /root/.cache/pip /opt/buildtools/Python-3.11.4*
 
 # -----------------------------------------------------------------------------
