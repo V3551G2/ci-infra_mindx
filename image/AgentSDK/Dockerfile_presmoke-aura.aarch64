@@ -14,7 +14,7 @@
 # 执行链：
 #   run_presmoke_aura.sh
 #     -> presmoke/aura/presmoke.sh
-#          -> pip install mlflow / ray==2.55.1 (运行期，脚本内自装)
+#          -> pip install mlflow / ray==2.55.1 (脚本运行期自装，本镜像已预装使其离线 no-op)
 #          -> pytest presmoke/aura/cases/test_endtoend.py
 #               -> 用例通过 `bash aura/scripts/start_rl_with_verl_vllm.sh` 调起真实启动脚本
 #                  该脚本做 base.conf/hosts.conf 解析、参数校验，并调用
@@ -34,7 +34,7 @@
 #   用例均为「配置解析 / CLI 校验」类：Test02~09 断言启动脚本在解析阶段报错退出，
 #   Test10 仅断言输出中出现 "mode"（start_rl_with_verl_vllm.sh 的 work_mode 日志即可满足），
 #   因此 **不需要** CANN / HDK、torch / torch-npu、vllm / vllm-ascend、MindSpeed /
-#   Megatron、ray（ray 由 presmoke.sh 运行期自装）等数十 GB 的 NPU 训练运行时；
+#   Megatron 等数十 GB 的 NPU 训练运行时（仅按 presmoke.sh 要求预装 mlflow 与 ray==2.55.1）；
 #   旧镜像中 12.3GB 的 CANN 层、~2.5GB 的 torch 依赖层全部移除，
 #   本镜像仅保留上述 5 类真实依赖，体积显著下降、构建时间大幅缩短。
 #
@@ -72,6 +72,20 @@ COPY script/python_3.11.4_presmoke.sh /script/python_3.11.4_presmoke.sh
 ENV PATH=/opt/buildtools/python-3.11.4/bin:${PATH}
 RUN bash /script/python_3.11.4_presmoke.sh \
     && rm -rf /root/.cache/pip /opt/buildtools/Python-3.11.4*
+
+# -----------------------------------------------------------------------------
+# 2b. aura smoke 运行期依赖预装（关键：使 presmoke.sh 的运行期 pip 安装离线可过）
+#     presmoke/aura/presmoke.sh 运行期会执行：
+#         pip install mlflow           -i https://mirrors.aliyun.com/pypi/simple
+#         pip install ray==2.55.1      -i https://mirrors.aliyun.com/pypi/simple
+#         apt update && apt install net-tools iproute2 -y
+#     实测运行环境访问不到该 pip 源（pip 报 "from versions: none"），脚本会在此直接失败。
+#     这里按脚本相同的包与版本预装，运行期 pip 即命中 "Requirement already satisfied"，
+#     无需联网；net-tools/iproute2 已在第 1 节预装。
+#     （ray 被 aura 代码广泛 import；mlflow 仅为满足脚本语句，aura 代码未直接 import。）
+# -----------------------------------------------------------------------------
+RUN pip3 install --no-cache-dir mlflow ray==2.55.1 \
+    && rm -rf /root/.cache/pip
 
 # -----------------------------------------------------------------------------
 # 3. OBS 客户端（.presmoke.yml 从 OBS 拉取构建产物所需）
