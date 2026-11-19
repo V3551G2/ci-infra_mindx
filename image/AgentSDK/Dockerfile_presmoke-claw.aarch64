@@ -1,0 +1,88 @@
+# syntax=docker/dockerfile:1
+# =============================================================================
+# AgentSDK PreSmoke_openclaw / PreSmoke_clawcodex 任务镜像（aarch64）
+#
+# 任务入口（AgentSDK 仓库）：
+#   .gitcode/workflows/PR-pipeline_full.yml
+#     -> PreSmoke_openclaw   (uses: .gitcode/workflows/.presmoke.yml)
+#          SMOKE_SCRIPT    = run_presmoke_openclaw.sh
+#          SMOKE_COMPONENT = AgentSDK   (SMOKE_SCRIPT_PATH = 仓库根目录)
+#          CHANGE_PATTERN  = openclaw/|presmoke/openclaw/
+#          EXTRA_SETUP     = true（运行期在容器内 apt install gettext-base openssl）
+#     -> PreSmoke_clawcodex  (uses: .gitcode/workflows/.presmoke.yml，仅 base.ref==tech_v26.2.0)
+#          SMOKE_SCRIPT    = run_presmoke_clawcodex.sh
+#          CHANGE_PATTERN  = clawcodex-ascend/|presmoke/clawcodex/
+#   两者原容器镜像为 openclaw 三层镜像（openclaw/docker 的 base -> app -> overlay 三件套）。
+#
+# 执行链：
+#   run_presmoke_openclaw.sh  -> presmoke/openclaw/presmoke.sh
+#        -> 预检查 envsubst / openssl / python3(含 pytest)
+#        -> python3 -m pytest presmoke/openclaw/cases/test_deploy.py
+#             用例通过 `bash openclaw/scripts/deploy.sh config -n N -p PORT -c DIR` 生成部署配置，
+#             再断言生成的 openclaw.json / models.json / docker-compose.yml / ssh/*.sh 等文件。
+#             deploy.sh（common/config/compose/args/version.sh）仅做 envsubst 模板渲染与
+#             `openssl rand` 生成 token/密码；config 子命令不启动容器、不调用 docker/node。
+#
+#   run_presmoke_clawcodex.sh -> presmoke/clawcodex/presmoke.sh
+#        -> python3 -m pytest presmoke/clawcodex/cases/test_scaffold.py（脚手架占位用例）
+#
+# 识别出的真实依赖（依据上述 workflow、run_presmoke_*.sh、presmoke.sh、test_deploy.py、
+# deploy.sh 及其 lib/*.sh）：
+#   1) Python3 + pytest：两个 presmoke 均由 pytest 驱动（presmoke.sh 运行期会再补装 pytest）。
+#   2) gettext-base(envsubst)：deploy.sh 渲染 openclaw.json / docker-compose 模板。
+#   3) openssl：deploy.sh/common.sh/compose.sh 用 `openssl rand` 生成 gateway token、sftp 密码。
+#   4) git：workflow 在容器内 clone 被测仓库并 merge PR。
+#   5) wget/curl/unzip：下载解压与 OBS 拉取构建产物（.presmoke.yml 步骤）。
+#
+# 关键结论（与旧 openclaw 三层镜像 base->app->overlay 的差异）：
+#   两个 PreSmoke 用例都是「deploy.sh 配置生成 / 脚手架」类静态校验，不在容器内真正运行
+#   openclaw gateway、不执行 node/pnpm 构建、不渲染页面，因此旧镜像中：
+#     node 运行时(211MB) / bun(532MB) / pnpm / npm 全局包(232MB) / playwright chromium(787MB)
+#     app 构建产物 node_modules(2.59GB)、dist(83MB) / hermes venv(201MB)+源码(176MB)
+#     / subagent-coordinator 插件 / pip 文档处理包(370MB) 等等全部移除，
+#   本镜像仅保留上述 5 类真实依赖，体积显著下降、构建时间大幅缩短。
+#
+# Python 依赖复用同一份「编译安装 + 环境注册」逻辑（script/python_3.11.4_presmoke.sh），
+# 与编译/UT 镜像共用 script/python_3.11.4.sh 保持一致的 Python 3.11.4 环境形态。
+# =============================================================================
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
+
+# -----------------------------------------------------------------------------
+# 1. 系统基础依赖：一次性装齐 + 立即清理 apt 缓存
+#    - build-essential/pkg-config/各 -dev：编译 Python 3.11
+#    - git/wget/curl/unzip/ca-certificates：克隆仓库、下载解压、OBS 拉取
+#    - gettext-base：提供 envsubst（deploy.sh 模板渲染，openclaw presmoke 硬依赖）
+#    - openssl：deploy.sh 生成 token/密码（openclaw presmoke 硬依赖）
+# -----------------------------------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates git wget curl unzip \
+        build-essential pkg-config \
+        zlib1g-dev libssl-dev libffi-dev libbz2-dev liblzma-dev libsqlite3-dev \
+        gettext-base openssl \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
+# wget 静默下载（关闭点状进度日志，失败仍返回非 0 便于定位 URL）
+RUN printf 'quiet = on\n' > /root/.wgetrc
+
+WORKDIR /opt/buildtools
+
+# -----------------------------------------------------------------------------
+# 2. Python 3.11.4（自编译，耗时最长，放前便于后续层复用构建缓存）
+#    复用与编译/UT 镜像一致的安装逻辑，但只装 PreSmoke 真实依赖（pytest 系列）
+# -----------------------------------------------------------------------------
+COPY script/python_3.11.4_presmoke.sh /script/python_3.11.4_presmoke.sh
+ENV PATH=/opt/buildtools/python-3.11.4/bin:${PATH}
+RUN bash /script/python_3.11.4_presmoke.sh \
+    && rm -rf /root/.cache/pip /opt/buildtools/Python-3.11.4*
+
+# -----------------------------------------------------------------------------
+# 3. OBS 客户端（.presmoke.yml 从 OBS 拉取构建产物所需，workflow 步骤在容器内执行）
+# -----------------------------------------------------------------------------
+COPY script/obsutil.sh /script/obsutil.sh
+RUN bash /script/obsutil.sh \
+    && rm -f /opt/buildtools/obsutil_linux_arm64.tar.gz
+
+USER root

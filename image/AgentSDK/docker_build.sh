@@ -18,7 +18,11 @@ case "$tag" in
     ;;
   agentsdk-presmoke-aura-aarch64)
     ARCH=aarch64
-    supplement=_aura
+    supplement=_presmoke-aura
+    ;;
+  agentsdk-presmoke-claw-aarch64)
+    ARCH=aarch64
+    supplement=_presmoke-claw
     ;;
   *)
     echo "Unknown tag: ${tag}"
