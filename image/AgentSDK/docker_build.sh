@@ -16,6 +16,10 @@ case "$tag" in
     ARCH=x86_64
     supplement=_ut
     ;;
+  agentsdk-presmoke-aura-aarch64)
+    ARCH=aarch64
+    supplement=_aura
+    ;;
   *)
     echo "Unknown tag: ${tag}"
     exit 1
