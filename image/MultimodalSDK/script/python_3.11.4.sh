@@ -54,10 +54,13 @@ pip3 install -q --upgrade pip
 pip3 install -q wheel setuptools==70.3.0
 
 # 对齐 build_script/build.sh 与源码 import：
-#   torch/torchvision/transformers/pillow/numpy/einops/opencv-python
+#   torch-npu/torch/torchvision/transformers/pillow/numpy/einops/opencv-python
+# 版本与门禁实跑一致（MultimodalSDK/build_script/build.sh 安装 torch-npu==2.9.1，
+# test 阶段安装 torchvision==0.24.1），避免镜像预装版本在运行时被 pip 覆盖。
 pip3 install -q numpy pillow==11.2.1 einops opencv-python
 pip3 install -q "transformers==4.51.3"
-pip3 install -q torch==2.6.0 torchvision==0.21.0
+pip3 install -q torch-npu==2.9.1
+pip3 install -q torchvision==0.24.1
 
 # 测试与覆盖率（build.sh 测试阶段：coverage/pytest/pytest-cov/pytest-html）
 pip3 install -q pytest pytest-cov pytest-html coverage

@@ -25,6 +25,5 @@ cd ${install_dir}
 make -j$(nproc)
 make install
 
-if [ -d "/usr/bin/" ];then
-    ln -s ${install_dir}/* /usr/bin/
-fi
+# 仅暴露 swig 可执行文件，避免把源码树（Examples/Doc/CMakeLists.txt 等）软链进 /usr/bin
+ln -sf /usr/local/bin/swig /usr/bin/swig
