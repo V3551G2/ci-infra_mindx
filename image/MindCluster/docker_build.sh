@@ -7,12 +7,15 @@ set -ex
 tag="${1:?Usage: $0 <TAG>}"
 shift
 
+supplement=""
 case "$tag" in
   mindcluster-ut_faultdialog_python-x86_64)
     ARCH=x86_64
+    supplement=_faultdialog_python
     ;;
-  mindcluster-ut_faultdialog_python-aarch64)
-    ARCH=aarch64
+  mindcluster-ut_python-x86_64)
+    ARCH=x86_64
+    supplement=_ut_python
     ;;
   *)
     echo "Unknown tag: ${tag}"
@@ -21,7 +24,7 @@ case "$tag" in
 esac
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DOCKERFILE="${SCRIPT_DIR}/Dockerfile_faultdialog_python.${ARCH}"
+DOCKERFILE="${SCRIPT_DIR}/Dockerfile${supplement}.${ARCH}"
 echo "===DOCKERFILE: ${DOCKERFILE}"
 
 if [[ ! -f "${DOCKERFILE}" ]]; then
