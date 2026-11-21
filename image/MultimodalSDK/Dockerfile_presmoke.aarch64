@@ -1,0 +1,52 @@
+# syntax=docker/dockerfile:1
+# =============================================================================
+# 精简版 Dockerfile —— MultiModalSDK 门禁 PreSmoke 任务镜像
+#
+# 目标镜像 : swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_image:multimodalsdk-presmoke-aarch64-<yyyymmddHHMM>
+# 使用位置 : .gitcode/workflows/.presmoke.yml  ->  container.image (IMAGE_FLAG)
+#
+# 相对旧镜像 mindx_arm:vllm-ascend_v0.23.0rc1 的裁剪依据（见 Dockerfile.recovered.vllm-ascend）：
+#   PreSmoke 任务链路 = .presmoke.yml -> run_presmoke.sh -> test/presmoke/install.sh + pytest test/presmoke/mm_acc/
+#   真正被 import 的只有 mm SDK 及以下第三方包，vllm / vllm-ascend / mooncake / triton 全链路不参与。
+#
+#   移除的冗余层（旧镜像第 1 段，约 -5.9GB）：
+#     - vllm 源码(144MB) + vllm 安装(1.54GB)
+#     - vllm-ascend 源码(160MB) + vllm-ascend 安装含 triton-ascend(3.24GB)
+#     - mooncake-transfer-engine-npu / modelscope / ray / numactl / libibverbs / clang-15 等
+#   保留：
+#     - CANN 9.0.1 运行时（mm 的 libcore.so 依赖 libascendcl 等，必须保留，体积主要来源）
+#     - python3.12.13 及 PreSmoke 真实运行依赖
+# =============================================================================
+
+# CANN 基础镜像：与 vllm-ascend 镜像同一底座（CANN9.0.1 + ascend-toolkit + nnal/ATB + python3.12.13）
+# 由 ci-infra 产出，tag 形如 multimodalsdk-aarch64-<ts>；此处以参数占位，构建时传入实际 tag。
+ARG BASE_IMAGE=swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_image:multimodalsdk-aarch64-<ts>
+FROM ${BASE_IMAGE}
+
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_EXTRA_INDEX_URL=https://mirrors.huaweicloud.com/ascend/repos/pypi
+
+WORKDIR /workspace
+
+# PreSmoke 运行依赖（与 run_presmoke.sh 中运行期 pip 安装的版本对齐，前移进镜像）
+#   pillow / torchvision / librosa / torch-npu / transformers / einops —— run_presmoke.sh 显式安装
+#   opencv-python-headless —— mm.core.frame_selector 顶层 import cv2，旧镜像由 vllm 间接提供，精简镜像必须显式补齐
+#   numpy<2                —— 与 torch-npu 2.9.1 / torchvision 0.24.1 配套
+#   pytest                 —— 运行 test/presmoke/mm_acc/
+RUN pip3 config set global.index-url ${PIP_INDEX_URL} \
+ && pip3 config set global.extra-index-url ${PIP_EXTRA_INDEX_URL} \
+ && pip3 install --no-cache-dir \
+        "numpy<2" \
+        "pillow>=11.2.1" \
+        torch==2.9.1 \
+        torch-npu==2.9.1 \
+        torchvision==0.24.1 \
+        transformers==4.51.3 \
+        einops \
+        librosa \
+        opencv-python-headless \
+        pytest \
+ && pip3 cache purge
+
+# 运行期由 .presmoke.yml 负责 source CANN / SDK 环境变量，镜像内不必固化
+CMD ["/bin/bash"]
