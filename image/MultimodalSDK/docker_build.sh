@@ -12,6 +12,10 @@ case "$tag" in
   multimodalsdk-aarch64)
     ARCH=aarch64
     ;;
+  multimodalsdk-ut_cpp-aarch64)
+    ARCH=aarch64
+    supplement=_ut
+    ;;
   *)
     echo "Unknown tag: ${tag}"
     exit 1
