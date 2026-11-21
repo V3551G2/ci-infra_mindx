@@ -18,7 +18,7 @@ case "$tag" in
     ;;
   multimodalsdk-presmoke-aarch64)
     ARCH=aarch64
-    supplement=_ut
+    supplement=_presmoke
     ;;
   *)
     echo "Unknown tag: ${tag}"

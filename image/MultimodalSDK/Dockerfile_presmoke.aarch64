@@ -19,8 +19,8 @@
 # =============================================================================
 
 # CANN 基础镜像：与 vllm-ascend 镜像同一底座（CANN9.0.1 + ascend-toolkit + nnal/ATB + python3.12.13）
-# 由 ci-infra 产出，tag 形如 multimodalsdk-aarch64-<ts>；此处以参数占位，构建时传入实际 tag。
-ARG BASE_IMAGE=swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_image:multimodalsdk-aarch64-<ts>
+# 由 ci-infra 产出；此处给定默认值，构建时可通过 --build-arg BASE_IMAGE=<实际 tag> 覆盖。
+ARG BASE_IMAGE=swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_image:multimodalsdk-aarch64-202611210621
 FROM ${BASE_IMAGE}
 
 ARG PIP_INDEX_URL=https://pypi.org/simple
