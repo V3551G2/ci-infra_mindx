@@ -36,14 +36,18 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
 
 # =============================================================================
-# 1. 系统基础依赖（一次性装齐 + 立即清理 apt 缓存）
+# 1. 系统基础依赖（一次性装齐）
 #    仅保留编译工具链、下载解压工具与 Python/C++ 编译所需头文件；
-#    libcapture-tiny-perl/libdatetime-perl 为 lcov 2.x 运行所需的 perl 模块。
+#    libcapture-tiny-perl/libdatetime-perl 为 lcov 2.x 运行所需的 perl 模块；
+#    git-lfs 为 UT 必需：.ut_cpp.yml 首个步骤执行 apt install -y git git-lfs 与
+#    git lfs pull，测试视频 AccSDK/test/data/videos/*.mp4 为 LFS 指针，缺则失败。
+#    刻意保留 /var/lib/apt/lists（不清空），使运行期 apt install -y git git-lfs
+#    能在无外网时判定为「已安装最新版」并返回 0，避免门禁步骤因缺包索引报错。
 # =============================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc-9 g++-9 build-essential make pkg-config \
         automake autoconf libtool bison flex sudo \
-        git wget curl unzip tar patch dos2unix vim ca-certificates \
+        git git-lfs wget curl unzip tar patch dos2unix vim ca-certificates \
         libffi-dev zlib1g-dev libssl-dev openssl \
         libbz2-dev liblzma-dev libsqlite3-dev libc-dev libpcre2-dev \
         libnuma-dev numactl \
@@ -54,7 +58,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && update-alternatives --set g++ /usr/bin/g++-9 \
     && update-alternatives --install /usr/bin/cc cc /usr/bin/gcc 100 \
     && update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++ 100 \
-    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+    && rm -rf /var/cache/apt/*
 
 # wget 静默下载（verbose=off 关闭点状进度以精简日志，仍保留错误信息便于定位失败 URL）
 RUN printf 'verbose = off\n' > /root/.wgetrc
