@@ -31,16 +31,16 @@ ARG PIP_EXTRA_INDEX_URL=https://mirrors.huaweicloud.com/ascend/repos/pypi
 WORKDIR /workspace
 
 # vllm 运行环境 + 测试依赖：
-#   vllm / vllm-ascend / triton-ascend —— test_vllm.py 需要可执行的 `vllm` 服务
+#   vllm-ascend / triton-ascend       —— test_vllm.py 需要可执行的 `vllm` 服务
 #   mooncake-transfer-engine-npu     —— 历史 presmoke 环境的一部分（vllm-ascend 传输引擎）
 #   pytest                           —— run_presmoke.sh 执行 python3 -m pytest test/presmoke/mm_acc/
 #   librosa / einops                 —— 音频等用例 import
-# 用法说明：--upgrade-strategy only-if-needed 避免改动 base 已固化的
-#          torch-npu 2.9.1 / torchvision 0.24.1 配套版本。
+# 说明：vllm 由 vllm-ascend==0.23.0rc1 的依赖声明自动拉取（不显式钉 vllm 版本，
+#      避免手写 vllm==0.23.0 与 vllm-ascend 声明的 torch 版本互斥导致
+#      pip ResolutionImpossible）。torch 栈会随之升级到 vllm-ascend 匹配的版本。
 RUN python3 -m pip config set global.index-url ${PIP_INDEX_URL} \
  && python3 -m pip config set global.extra-index-url "${PIP_EXTRA_INDEX_URL} https://mirrors.aliyun.com/pypi/web/simple" \
- && python3 -m pip install --no-cache-dir --upgrade-strategy only-if-needed \
-        vllm==0.23.0 \
+ && python3 -m pip install --no-cache-dir \
         vllm-ascend==0.23.0rc1 \
         triton-ascend==3.2.1 \
         mooncake-transfer-engine-npu==0.3.11.post1 \
