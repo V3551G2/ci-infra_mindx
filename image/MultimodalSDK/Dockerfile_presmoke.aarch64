@@ -1,26 +1,29 @@
 # syntax=docker/dockerfile:1
 # =============================================================================
-# 精简版 Dockerfile —— MultiModalSDK 门禁 PreSmoke 任务镜像
+# Dockerfile —— MultiModalSDK 门禁 PreSmoke 任务镜像
 #
 # 目标镜像 : swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_image:multimodalsdk-presmoke-aarch64-<yyyymmddHHMM>
-# 使用位置 : .gitcode/workflows/.presmoke.yml  ->  container.image (IMAGE_FLAG)
+# 使用位置 : .gitcode/workflows/.presmoke.yml -> container.image (IMAGE_FLAG)
 #
-# 相对旧镜像 mindx_arm:vllm-ascend_v0.23.0rc1 的裁剪依据（见 Dockerfile.recovered.vllm-ascend）：
-#   PreSmoke 任务链路 = .presmoke.yml -> run_presmoke.sh -> test/presmoke/install.sh + pytest test/presmoke/mm_acc/
-#   真正被 import 的只有 mm SDK 及以下第三方包，vllm / vllm-ascend / mooncake / triton 全链路不参与。
+# 依赖结论（据 2026-11-23 门禁失败 run 6fbb9f5dfa6740eabba175125750a1f8 修正）：
+#   test/presmoke/mm_acc/ 全量用例中，vllm 子目录
+#   (test/presmoke/mm_acc/vllm/test_vllm.py) 会启动真实服务
+#   —— fixture vllm_server 执行 subprocess.Popen(['vllm','serve',<model>,...])，
+#   因此 presmoke 镜像必须预置可用的 vllm / vllm-ascend 运行环境。
+#   原先「vllm / vllm-ascend / mooncake / triton 全链路对 presmoke 冗余」的裁剪
+#   判断已被该失败证伪（报错：FileNotFoundError: 'vllm'）。
 #
-#   移除的冗余层（旧镜像第 1 段，约 -5.9GB）：
-#     - vllm 源码(144MB) + vllm 安装(1.54GB)
-#     - vllm-ascend 源码(160MB) + vllm-ascend 安装含 triton-ascend(3.24GB)
-#     - mooncake-transfer-engine-npu / modelscope / ray / numactl / libibverbs / clang-15 等
-#   保留：
-#     - CANN 9.0.1 运行时（mm 的 libcore.so 依赖 libascendcl 等，必须保留，体积主要来源）
-#     - python3.12.13 及 PreSmoke 真实运行依赖
+# 底座选择：
+#   vllm-ascend v0.23.0rc1 基于 CANN 9.0.1 + python3.12.13；而 Build_Arm / UT_cpp
+#   所用的 multimodalsdk-aarch64 精简单镜像是 CANN 8.3.RC2 + python3.11.4，
+#   在 8.3.RC2 上源码编译 vllm-ascend 存在 CANN 版本不兼容风险。
+#   故 presmoke 直接复用现成的 vllm-ascend 镜像作底座（与历史可用的 presmoke
+#   运行环境一致），仅补充 pytest 等少量测试运行依赖。
 # =============================================================================
 
-# CANN 基础镜像：与 vllm-ascend 镜像同一底座（CANN9.0.1 + ascend-toolkit + nnal/ATB + python3.12.13）
-# 由 ci-infra 产出；此处给定默认值，构建时可通过 --build-arg BASE_IMAGE=<实际 tag> 覆盖。
-ARG BASE_IMAGE=swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_image:multimodalsdk-ut_cpp-aarch64-202611210803
+# vllm-ascend 运行镜像：已含 vllm / vllm-ascend / triton-ascend / torch-npu / CANN9.0.1
+# 由 ci-infra 产出；构建时可通过 --build-arg BASE_IMAGE=<实际 tag> 覆盖。
+ARG BASE_IMAGE=swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_arm:vllm-ascend_v0.23.0rc1
 FROM ${BASE_IMAGE}
 
 ARG PIP_INDEX_URL=https://pypi.org/simple
@@ -28,25 +31,18 @@ ARG PIP_EXTRA_INDEX_URL=https://mirrors.huaweicloud.com/ascend/repos/pypi
 
 WORKDIR /workspace
 
-# PreSmoke 运行依赖（与 run_presmoke.sh 中运行期 pip 安装的版本对齐，前移进镜像）
-#   pillow / torchvision / librosa / torch-npu / transformers / einops —— run_presmoke.sh 显式安装
-#   opencv-python-headless —— mm.core.frame_selector 顶层 import cv2，旧镜像由 vllm 间接提供，精简镜像必须显式补齐
-#   numpy<2                —— 与 torch-npu 2.9.1 / torchvision 0.24.1 配套
-#   pytest                 —— 运行 test/presmoke/mm_acc/
-RUN pip3 config set global.index-url ${PIP_INDEX_URL} \
- && pip3 config set global.extra-index-url ${PIP_EXTRA_INDEX_URL} \
- && pip3 install --no-cache-dir \
-        "numpy<2" \
-        "pillow>=11.2.1" \
-        torch==2.9.1 \
-        torch-npu==2.9.1 \
-        torchvision==0.24.1 \
-        transformers==4.51.3 \
-        einops \
-        librosa \
-        opencv-python-headless \
+# 仅补充非 torch 的测试运行依赖：
+#   pytest  —— run_presmoke.sh 执行 python3 -m pytest test/presmoke/mm_acc/
+#   librosa —— 音频用例（run_presmoke.sh 运行期也会安装，此处预热）
+#   einops  —— 用例 import
+# 注意：不要在此重装 torch / torch-npu / torchvision，避免覆盖 vllm-ascend
+#       已固化的配套版本（vllm 与 torch-npu 版本强绑定）。
+RUN python3 -m pip config set global.index-url ${PIP_INDEX_URL} \
+ && python3 -m pip config set global.extra-index-url ${PIP_EXTRA_INDEX_URL} \
+ && python3 -m pip install --no-cache-dir --upgrade-strategy only-if-needed \
         pytest \
- && pip3 cache purge
+        librosa \
+        einops \
+ && python3 -m pip cache purge
 
-# 运行期由 .presmoke.yml 负责 source CANN / SDK 环境变量，镜像内不必固化
 CMD ["/bin/bash"]
