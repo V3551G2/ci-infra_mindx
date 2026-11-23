@@ -23,7 +23,7 @@
 
 # vllm-ascend 运行镜像：已含 vllm / vllm-ascend / triton-ascend / torch-npu / CANN9.0.1
 # 由 ci-infra 产出；构建时可通过 --build-arg BASE_IMAGE=<实际 tag> 覆盖。
-ARG BASE_IMAGE=swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_arm:vllm-ascend_v0.23.0rc1
+ARG BASE_IMAGE=swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_image:multimodalsdk-aarch64-202611230343
 FROM ${BASE_IMAGE}
 
 ARG PIP_INDEX_URL=https://pypi.org/simple
