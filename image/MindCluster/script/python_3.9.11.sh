@@ -59,11 +59,15 @@ timeout = 120
 EOF
 
 # 预装 UT 依赖（去重后的一站式安装，--no-cache-dir 避免缓存膨胀）
+# torch 单独用 CPU 源安装：默认 PyPI 的 torch==2.1.0 会连带约 2.6GB CUDA 依赖
+# （nvidia-cudnn/cublas/nccl/... + triton），导致镜像过大、跨境推送 SWR 超时；
+# UT 为 CPU 测试，无需 CUDA。
 pip3 install --no-cache-dir \
     setuptools wheel \
     requests pyyaml faker tox asynctest \
     pytest pytest-html pytest-asyncio pytest-cov pytest-mock coverage pyfakefs hypothesis \
-    torch==2.1.0 "grpcio>=1.62.2" pyOpenSSL "protobuf>=4.24.4"
+    "grpcio>=1.62.2" pyOpenSSL "protobuf>=4.24.4"
+pip3 install --no-cache-dir torch==2.1.0+cpu --index-url https://download.pytorch.org/whl/cpu
 
 # 末尾再链一次，暴露 pip 安装产生的 console 脚本（如 pytest/coverage）
 ln -sf ${install_dir}/bin/* /usr/local/bin
