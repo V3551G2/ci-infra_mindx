@@ -30,6 +30,18 @@ ARG PIP_EXTRA_INDEX_URL=https://mirrors.huaweicloud.com/ascend/repos/pypi
 
 WORKDIR /workspace
 
+# 编译工具链：arctic-inference==0.1.1（vllm-ascend==0.23.0rc1 的强依赖，仅发布 sdist）
+# 安装时需源码编译 C++ 扩展，其 csrc/suffix_decoding/suffix_tree.h 使用 C++20 的 <span>
+# （pip 以 -std=gnu++2a 编译）。base 为兼容 AccSDK 编译把默认 c++/g++ 固定为 gcc-9，
+# GCC 9 的 libstdc++ 无 <span>，直接报 `fatal error: span: No such file or directory`。
+# 这里在 presmoke 层安装 g++-11 并切换默认工具链（仅影响本镜像，不动 base）。
+RUN apt-get update && apt-get install -y --no-install-recommends gcc-11 g++-11 \
+ && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110 \
+ && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 110 \
+ && update-alternatives --set gcc /usr/bin/gcc-11 \
+ && update-alternatives --set g++ /usr/bin/g++-11 \
+ && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
 # vllm 运行环境 + 测试依赖：
 #   vllm-ascend / triton-ascend       —— test_vllm.py 需要可执行的 `vllm` 服务
 #   mooncake-transfer-engine-npu     —— 历史 presmoke 环境的一部分（vllm-ascend 传输引擎）
