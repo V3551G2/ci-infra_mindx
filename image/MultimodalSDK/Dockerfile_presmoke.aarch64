@@ -54,6 +54,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc-11 g++-11 \
 #         若写进同一条 pip install 会联合解析导致 ResolutionImpossible；故拆成两条
 #         独立命令：先装 vllm（torch 2.11.0），再由 vllm-ascend 把 torch 降到 2.10.0
 #         并引入 torch-npu，与历史可用环境（vllm-ascend v0.23.0rc1）形态一致。
+# 注意 3：pip 把可执行脚本装到 /opt/buildtools/python-3.11.4/bin，而该目录不在 PATH 上
+#         （构建日志：WARNING: The script vllm is installed in
+#          '/opt/buildtools/python-3.11.4/bin' which is not on PATH）。
+#         base 镜像的 python_3.11.4.sh 是靠 `ln -sf ${install_dir}/bin/* /usr/local/bin`
+#         让脚本在 PATH（/usr/local/bin）可见，但那只覆盖 base 构建时的脚本；本层新装的
+#         vllm 无软链，故 presmoke 运行时 subprocess 找不到 'vllm'
+#         （FileNotFoundError: 'vllm'）。这里补一次同款软链，暴露新脚本到 /usr/local/bin。
 RUN python3 -m pip config set global.index-url ${PIP_INDEX_URL} \
  && python3 -m pip config set global.extra-index-url "${PIP_EXTRA_INDEX_URL} https://mirrors.aliyun.com/pypi/web/simple" \
  && python3 -m pip install --no-cache-dir \
@@ -66,6 +73,7 @@ RUN python3 -m pip config set global.index-url ${PIP_INDEX_URL} \
         pytest \
         librosa \
         einops \
+ && ln -sf /opt/buildtools/python-3.11.4/bin/* /usr/local/bin \
  && python3 -m pip cache purge
 
 CMD ["/bin/bash"]
