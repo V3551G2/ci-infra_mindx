@@ -43,15 +43,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc-11 g++-11 \
  && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # vllm 运行环境 + 测试依赖：
-#   vllm-ascend / triton-ascend       —— test_vllm.py 需要可执行的 `vllm` 服务
+#   vllm                             —— test_vllm.py 需要可执行的 `vllm serve` 服务
+#   vllm-ascend / triton-ascend       —— vllm 的 NPU 后端
 #   mooncake-transfer-engine-npu     —— 历史 presmoke 环境的一部分（vllm-ascend 传输引擎）
 #   pytest                           —— run_presmoke.sh 执行 python3 -m pytest test/presmoke/mm_acc/
 #   librosa / einops                 —— 音频等用例 import
-# 说明：vllm 由 vllm-ascend==0.23.0rc1 的依赖声明自动拉取（不显式钉 vllm 版本，
-#      避免手写 vllm==0.23.0 与 vllm-ascend 声明的 torch 版本互斥导致
-#      pip ResolutionImpossible）。torch 栈会随之升级到 vllm-ascend 匹配的版本。
+# 注意 1：vllm-ascend==0.23.0rc1 的依赖声明**不含 vllm**，必须显式安装 vllm 本体，
+#         否则镜像内无 `vllm` 可执行文件（报错：FileNotFoundError: 'vllm'）。
+# 注意 2：vllm 0.23.0 声明 torch==2.11.0，vllm-ascend 0.23.0rc1 声明 torch==2.10.0，
+#         若写进同一条 pip install 会联合解析导致 ResolutionImpossible；故拆成两条
+#         独立命令：先装 vllm（torch 2.11.0），再由 vllm-ascend 把 torch 降到 2.10.0
+#         并引入 torch-npu，与历史可用环境（vllm-ascend v0.23.0rc1）形态一致。
 RUN python3 -m pip config set global.index-url ${PIP_INDEX_URL} \
  && python3 -m pip config set global.extra-index-url "${PIP_EXTRA_INDEX_URL} https://mirrors.aliyun.com/pypi/web/simple" \
+ && python3 -m pip install --no-cache-dir \
+        --extra-index-url https://download.pytorch.org/whl/cpu/ \
+        vllm==0.23.0 \
  && python3 -m pip install --no-cache-dir \
         vllm-ascend==0.23.0rc1 \
         triton-ascend==3.2.1 \
