@@ -45,7 +45,7 @@ jobs:
           DIR_TAGS = {
               "IndexSDK": ["indexsdk-x86_64", "indexsdk-aarch64", "indexsdk-ut_cpp-x86_64"],
               "RAGSDK": ["ragsdk-x86_64", "ragsdk-aarch64", "ragsdk-ut_python-x86_64", "ragsdk-presmoke-aarch64"],
-              "MindCluster": ["mindcluster-ut_faultdialog_python-x86_64", "mindcluster-ut_python-x86_64"],
+              "MindCluster": ["mindcluster-ut-python-x86_64"],
               "RecSDK": ["recsdk-x86_64", "recsdk-aarch64"],
               "AgentSDK": ["agentsdk-aarch64", "agentsdk-ut-x86_64", "agentsdk-presmoke-aura-aarch64", "agentsdk-presmoke-claw-aarch64"],
               "MultimodalSDK": ["multimodalsdk-aarch64", "multimodalsdk-presmoke-aarch64"],

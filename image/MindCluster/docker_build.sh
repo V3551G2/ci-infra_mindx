@@ -9,13 +9,10 @@ shift
 
 supplement=""
 case "$tag" in
-  mindcluster-ut_faultdialog_python-x86_64)
+  # 统一门禁镜像：UT_python + UT_faultdiag_python 共用同一镜像
+  mindcluster-ut-python-x86_64)
     ARCH=x86_64
-    supplement=_faultdialog_python
-    ;;
-  mindcluster-ut_python-x86_64)
-    ARCH=x86_64
-    supplement=_ut_python
+    supplement=_ut
     ;;
   *)
     echo "Unknown tag: ${tag}"

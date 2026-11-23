@@ -1,4 +1,6 @@
 #!/bin/bash
+# 统一门禁镜像（mindcluster-ut-python-x86_64）的 Python 3.11.4 安装脚本，
+# 同时服务 UT_python 与 UT_faultdiag_python 两个 job。
 set -eu
 set -o pipefail
 
@@ -61,3 +63,10 @@ pip3 install -q pytest pytest-cov pytest-mock pytest-html coverage mock pexpect 
 
 # faultdiag 诊断/清洗运行依赖（UT 执行脚本 + .devcontainer）
 pip3 install -q openpyxl paramiko scp cryptography grpcio protobuf pyOpenSSL requests
+
+# UT_python（taskd / ascend-clusterops-agent / mindio-acp）测试依赖
+pip3 install -q pyyaml faker tox asynctest pyfakefs hypothesis pytest-asyncio
+pip3 install -q "grpcio>=1.62.2" "protobuf>=4.24.4"
+# torch 用 CPU 源安装：默认 PyPI 的 torch==2.1.0 会连带约 2.6GB CUDA 依赖，
+# 导致镜像过大、跨境推送 SWR 超时；UT 为 CPU 测试，无需 CUDA。
+pip3 install -q --no-cache-dir torch==2.1.0+cpu --index-url https://download.pytorch.org/whl/cpu

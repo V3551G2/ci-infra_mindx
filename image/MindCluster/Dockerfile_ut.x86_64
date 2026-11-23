@@ -1,0 +1,69 @@
+# syntax=docker/dockerfile:1
+# =====================================================================
+# 门禁统一镜像：UT_python + UT_faultdiag_python（tag: mindcluster-ut-python-x86_64）
+# 使用方：Ascend/mind-cluster 的 UT_python 与 UT_faultdiag_python 两个 job
+#   UT_python           : .ut_python.yml           -> scripts/ut_python_execute.sh
+#   UT_faultdiag_python : .ut_faultdiag_python.yml -> scripts/ut_faultdiag_python_execute.sh
+# 关键约束：
+#   - Python 固定 3.11.4（mind-cluster 执行脚本统一指向 /opt/buildtools/python-3.11.4）
+#   - SWIG 必须 >=4.2.0（mindio acp abi3 wheel 要求，见 build/README.md）
+#   - 运行时脚本会 apt-get install / pip install，故保留 /var/lib/apt/lists 索引
+# =====================================================================
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
+
+# 系统依赖（两任务并集）：
+#   build-essential/cmake/lcov：C++ 构建与覆盖率，UT_python 的 mindio-acp 需要
+#   file/xz-utils：faultdiag 侧工具
+#   libnuma-dev/numactl：ubs-comm 依赖 <numa.h>
+#   其余为 Python 3.11.4 编译依赖与下载/转换工具
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        lcov \
+        git \
+        wget \
+        curl \
+        unzip \
+        ca-certificates \
+        dos2unix \
+        file \
+        xz-utils \
+        libffi-dev \
+        zlib1g-dev \
+        libssl-dev \
+        libsqlite3-dev \
+        libbz2-dev \
+        liblzma-dev \
+        libnuma-dev \
+        numactl \
+    && rm -rf /var/cache/apt/*
+
+# wget 静默下载（保留报错信息，仅关闭点状进度输出）
+RUN printf 'quiet = on\n' > /root/.wgetrc
+
+WORKDIR /opt/buildtools
+
+# ---------------------------------------------------------------------
+# Python 3.11.4（自编译，最耗时，前置以复用构建缓存）+ SWIG + 预装 UT 依赖
+#   - SWIG 用 pip 安装 4.2.x（满足 abi3 的 >=4.2.0 要求）
+#   - 安装后清理源码/tarball/pip 缓存以减小体积
+# ---------------------------------------------------------------------
+COPY script/python_3.11.4.sh /script/python_3.11.4.sh
+RUN bash /script/python_3.11.4.sh \
+    && pip3 install --no-cache-dir "swig>=4.2,<4.4" \
+    && ln -sf /opt/buildtools/python-3.11.4/bin/swig /usr/local/bin/swig \
+    && swig -version \
+    && rm -rf /opt/buildtools/Python-3.11.4* /root/.cache/pip
+
+# ---------------------------------------------------------------------
+# OBS 客户端（faultdiag 构建产物上传工具）
+# ---------------------------------------------------------------------
+COPY script/obsutil.sh /script/obsutil.sh
+RUN bash /script/obsutil.sh \
+    && rm -f /opt/buildtools/obsutil_linux_amd64.tar.gz
+
+USER root
