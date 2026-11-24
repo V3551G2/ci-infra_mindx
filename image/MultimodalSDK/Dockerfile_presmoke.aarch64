@@ -64,35 +64,43 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc-11 g++-11 \
 # nnal(ATB) 组合：vllm-ascend 0.23.0rc1 要求 torch-npu 2.10.0.post2，该 torch-npu 与
 # CANN 9.0.1/ATB 9.0.1 配套，故同步安装 CANN 9.0.1 toolkit（提供 9.0.1 运行时）+ nnal 9.0.1。
 # =============================================================================
-# ★★ 2026-11-24 run 29 实测的关键事实：CANN 9.0.1 toolkit 装到 **/usr/local/Ascend/cann**
-#    （安装器提示 `source /usr/local/Ascend/cann/set_env.sh`），而底座自带的是
-#    /usr/local/Ascend/ascend-toolkit/{8.3.RC2,latest->8.3.RC2}。
-#    上一版（4b0fb9f）把 ascend-toolkit/latest/lib64(8.3.RC2) 和 9.0.1 运行时同时放进搜索
-#    路径 → libhccl.so 命中 8.3.RC2 副本、其宿主侧符号由 9.0.1 运行时提供 → 版本错配：
-#      ImportError: .../ascend-toolkit/8.3.RC2/.../libhccl.so: undefined symbol:
-#                   _Z13H2DTlvRequestPvP7tlv_msgS1_
-#      -> RuntimeError: Failed to load the backend extension: torch_npu（presmoke 12 errors）
-#    故本层改为「单一 9.0.1」：动态探测 9.0.1 根目录，用 00- 前缀的 ld.so.conf.d 把它的库目录
-#    以最高优先级写入（先于底座 8.3.RC2 的缓存项），并彻底移除 8.3.RC2 目录引用。
+# ★★ 2026-11-24 根因（权威结论，修正上一版 efd8e5e 构建失败）：
+#   1) vllm-ascend 0.23.0rc1 官方依赖 = CANN 9.0.1 / torch_npu 2.10.0.post2，
+#      故 CANN 9.0.1 必须装（不能退回 8.3.RC2）。
+#   2) 从 CANN 8.5.0 起 `libhccl.so` 已从 toolkit 迁出，改由 **SoC ops 包** 提供：
+#      「9.1.0 之前的社区版本需额外安装 Ascend-cann-{soc}-ops_<ver>_linux-<arch>.run，
+#        否则运行时会报缺少 libhccl.so」。
+#      这正是 efd8e5e 构建失败的原因：只装了 toolkit+nnal，9.0.1 目录下根本没有
+#      libhccl.so，`ldconfig -p | grep -q libhccl.so` 断言不过（exit 1）。
+#   3) 官方安装顺序 = toolkit -> {soc}-ops -> nnal。
+#      SoC 取 910b：vllm-ascend 官方 Dockerfile 默认 SOC_VERSION=ascend910b1。
+#   4) 2026-11-24 run 29 的 `libhccl.so undefined symbol _Z13H2DTlvRequestPvP7tlv_msgS1_`
+#      = 底座 8.3.RC2 的 libhccl 与 9.0.1 运行时混用所致。故 ld.so.conf.d 只放 9.0.1
+#      目录（00- 前缀，高于底座 8.3.RC2 缓存项），并删除底座旧 ascend.conf。
 ARG CANN_VERSION=9.0.1
+ARG SOC_NAME=910b
 RUN set -euo pipefail \
  && wget -q --no-check-certificate \
         "https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/CANN%20${CANN_VERSION}/Ascend-cann-toolkit_${CANN_VERSION}_linux-aarch64.run" \
+        "https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/CANN%20${CANN_VERSION}/Ascend-cann-${SOC_NAME}-ops_${CANN_VERSION}_linux-aarch64.run" \
         "https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/CANN%20${CANN_VERSION}/Ascend-cann-nnal_${CANN_VERSION}_linux-aarch64.run" \
  && chmod +x Ascend-cann-*.run \
  && echo y | "./Ascend-cann-toolkit_${CANN_VERSION}_linux-aarch64.run" --install --force \
- && set +eu; source /usr/local/Ascend/cann/set_env.sh 2>/dev/null || source /usr/local/Ascend/ascend-toolkit/set_env.sh; set -eu \
+ && echo y | "./Ascend-cann-${SOC_NAME}-ops_${CANN_VERSION}_linux-aarch64.run" --install --force \
  && echo y | "./Ascend-cann-nnal_${CANN_VERSION}_linux-aarch64.run" --install --force \
- && set +eu; [ -f /usr/local/Ascend/nnal/atb/set_env.sh ] && source /usr/local/Ascend/nnal/atb/set_env.sh --cxx_abi=1; set -eu \
  && rm -f Ascend-cann-*.run \
+ && CANN_ROOT="/usr/local/Ascend/cann" \
  && ATB_LIB_DIR="/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1/lib" \
- && test -f "${ATB_LIB_DIR}/libatb.so" \
- && CANN_ROOT="$(cd "$(dirname "$(ls -d /usr/local/Ascend/cann*/set_env.sh 2>/dev/null | head -n1)")" && pwd)" \
- && test -f "${CANN_ROOT}/set_env.sh" \
- && echo "[INFO] 9.0.1 CANN_ROOT=${CANN_ROOT}" \
  && echo "[INFO] all libhccl.so copies:" \
  && find /usr/local/Ascend -name 'libhccl.so' -printf '  %p\n' 2>/dev/null \
- && { find "${CANN_ROOT}" -maxdepth 3 -type d \( -name lib64 -o -name lib \) -printf '%p\n' 2>/dev/null || true; \
+ && test -f "${CANN_ROOT}/set_env.sh" \
+ && test -f "${CANN_ROOT}/lib64/libhccl.so" \
+ && test -f "${ATB_LIB_DIR}/libatb.so" \
+ && { echo "${CANN_ROOT}/lib64"; \
+      echo "${CANN_ROOT}/lib64/plugin/opskernel"; \
+      echo "${CANN_ROOT}/lib64/plugin/nnengine"; \
+      echo "${CANN_ROOT}/tools/aml/lib64"; \
+      echo "${CANN_ROOT}/tools/aml/lib64/plugin"; \
       echo "${ATB_LIB_DIR}"; \
       echo "/usr/local/Ascend/driver/lib64"; \
       echo "/usr/local/Ascend/driver/lib64/common"; \
@@ -100,6 +108,7 @@ RUN set -euo pipefail \
     | grep -vE '^$' | sort -u > /etc/ld.so.conf.d/00-ascend-cann901.conf \
  && rm -f /etc/ld.so.conf.d/ascend.conf \
  && ldconfig \
+ && echo "[INFO] 9.0.1 CANN_ROOT=${CANN_ROOT}" \
  && echo "[INFO] libhccl -> $(ldconfig -p | grep -m1 'libhccl.so')" \
  && echo "[INFO] libatb  -> $(ldconfig -p | grep -m1 'libatb.so')" \
  && ldconfig -p | grep -q 'libhccl.so' \
