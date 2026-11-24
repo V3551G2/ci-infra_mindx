@@ -59,7 +59,11 @@ pip3 install -q setuptools==70.3.0
 pip3 install -q numpy==1.26.4 pandas scikit-learn joblib ply
 
 # faultdiag 测试框架（test/requirements.txt + run_dt.sh）
-pip3 install -q pytest pytest-cov pytest-mock pytest-html coverage mock pexpect virtualenv
+# pytest 固定 8.x（<9）：pytest 9.x 的 MonkeyPatch.setattr 改为从实例 __dict__ 取旧值，
+# 对 MagicMock 的懒创建子属性（走 _mock_children，不在 __dict__）会得到 NOTSET，
+# undo() 随即 delattr 并留下 _deleted 标记，导致 mindio acc_checkpoint 等用例二次 patch 抛
+# "has no attribute" 而失败。8.4.2 与旧门禁镜像行为一致（已本地验证），且满足 pytest-asyncio(>=8.4)。
+pip3 install -q pytest==8.4.2 pytest-cov pytest-mock pytest-html coverage mock pexpect virtualenv
 
 # faultdiag 诊断/清洗运行依赖（UT 执行脚本 + .devcontainer）
 pip3 install -q openpyxl paramiko scp cryptography grpcio protobuf pyOpenSSL requests
