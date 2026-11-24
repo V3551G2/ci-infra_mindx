@@ -77,6 +77,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc-11 g++-11 \
 #   4) 2026-11-24 run 29 的 `libhccl.so undefined symbol _Z13H2DTlvRequestPvP7tlv_msgS1_`
 #      = 底座 8.3.RC2 的 libhccl 与 9.0.1 运行时混用所致。故 ld.so.conf.d 只放 9.0.1
 #      目录（00- 前缀，高于底座 8.3.RC2 缓存项），并删除底座旧 ascend.conf。
+#   5) 2026-11-24 run 45377723693（64d9789）nnal 安装失败 exit 4 的根因：
+#      上一版 efd8e5e 在装 nnal 之前 `source /usr/local/Ascend/cann/set_env.sh`，
+#      故 Ascend-cann-atb 子安装器的依赖预检（读取 ASCEND_HOME_PATH 等）能通过；
+#      64d9789 误删了这两处 source，导致 ATB 预检失败。此处恢复 source（toolkit/ops
+#      之后、nnal 之前；nnal 之后再 source atb set_env.sh），并在失败时打印 nnal 安装日志。
 ARG CANN_VERSION=9.0.1
 ARG SOC_NAME=910b
 RUN set -euo pipefail \
@@ -86,9 +91,16 @@ RUN set -euo pipefail \
         "https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/CANN%20${CANN_VERSION}/Ascend-cann-nnal_${CANN_VERSION}_linux-aarch64.run" \
  && chmod +x Ascend-cann-*.run \
  && echo y | "./Ascend-cann-toolkit_${CANN_VERSION}_linux-aarch64.run" --install --force \
+ && rm -f "./Ascend-cann-toolkit_${CANN_VERSION}_linux-aarch64.run" \
  && echo y | "./Ascend-cann-${SOC_NAME}-ops_${CANN_VERSION}_linux-aarch64.run" --install --force \
- && echo y | "./Ascend-cann-nnal_${CANN_VERSION}_linux-aarch64.run" --install --force \
- && rm -f Ascend-cann-*.run \
+ && rm -f "./Ascend-cann-${SOC_NAME}-ops_${CANN_VERSION}_linux-aarch64.run" \
+ && set +eu; source /usr/local/Ascend/cann/set_env.sh 2>/dev/null || true; set -eu \
+ && { echo y | "./Ascend-cann-nnal_${CANN_VERSION}_linux-aarch64.run" --install --force \
+      || { echo "[FATAL] nnal(ATB) install failed; ---- ascend_nnal_install.log (tail 200) ----"; \
+           tail -n 200 /var/log/ascend_seclog/ascend_nnal_install.log 2>/dev/null || true; \
+           echo "[FATAL] ---- end of nnal log ----"; exit 1; }; } \
+ && rm -f "./Ascend-cann-nnal_${CANN_VERSION}_linux-aarch64.run" \
+ && set +eu; source /usr/local/Ascend/nnal/atb/set_env.sh --cxx_abi=1 2>/dev/null || true; set -eu \
  && CANN_ROOT="/usr/local/Ascend/cann" \
  && ATB_LIB_DIR="/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1/lib" \
  && echo "[INFO] all libhccl.so copies:" \
