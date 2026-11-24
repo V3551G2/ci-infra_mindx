@@ -12,7 +12,12 @@ case "$tag" in
   # 统一门禁镜像：UT_python + UT_faultdiag_python 共用同一镜像
   mindcluster-ut-python-x86_64)
     ARCH=x86_64
-    supplement=_ut
+    supplement=_ut_python
+    ;;
+  # UT_cpp 门禁镜像：仅 ascend-docker-runtime cli 单测（C/C++ + cmake + lcov）
+  mindcluster-ut_cpp-x86_64)
+    ARCH=x86_64
+    supplement=_ut_cpp
     ;;
   *)
     echo "Unknown tag: ${tag}"
