@@ -1,0 +1,78 @@
+# syntax=docker/dockerfile:1
+# =====================================================================
+# 门禁镜像：UT_mindio_cpp（tag: mindcluster-ut-mindio-cpp-x86_64）
+#
+# 任务入口（Ascend/mind-cluster）：
+#   .gitcode/workflows/.ut_mindio_cpp.yml                    # UT_mindio_cpp job 定义
+#     └─ .gitcode/workflows/scripts/ut_mindio_cpp_execute.sh # 容器内执行入口
+#          ├─ component/mindio/acp/scripts/run_gtest_ut.sh   # 始终执行：acp gtest UT + lcov
+#          └─ component/mindio/tft/test/run_gtest_dt.sh      # tft 变更时：tft gtest UT + lcov
+#
+# 该 job 的真实依赖（由上述脚本与 component/mindio/**/CMakeLists.txt 推导）：
+#   gcc/g++/make   : C/C++ 编译（build-essential）
+#   cmake(>=3.18)  : acp / tft / test 的 CMake 构建；apt 版 3.22 已满足，无需自编译
+#   swig(>=4.2)    : c2python_api.i -> _c2python_api.so，acp abi3 wheel 要求（改用 pip 安装）
+#   python3.9.11   : 执行脚本硬编码 /opt/buildtools/python-3.9.11，用于 setup.py bdist_wheel
+#   lcov(1.x)      : 覆盖率报告，脚本依赖 `--rc lcov_branch_coverage=1`（lcov 2.x 已移除）
+#   git/dos2unix/ca-certificates : 三方源码 clone 与 CRLF 处理
+#   libnuma-dev    : memfs/bmm/bmm_pool.cpp `#include <numa.h>`
+#
+# 相比原「cluster 大镜像」已删除与本 job 无关的依赖（分别属 UT_go/UT_python/Build 任务）：
+#   Go 1.21.12 + gocov/gotestsum、musl、volcano 源码、torch 2.7.1+cpu(~733MB)、
+#   自编译 cmake/swig/bison、setuptools 源码编译、obsutil。
+# =====================================================================
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
+
+# ---------------------------------------------------------------------
+# 1. 系统依赖：单层一次性装齐，禁用推荐包，装完立即清理 apt 缓存/索引
+# ---------------------------------------------------------------------
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        cmake \
+        lcov \
+        git \
+        wget \
+        ca-certificates \
+        dos2unix \
+        libnuma-dev \
+        libssl-dev \
+        zlib1g-dev \
+        libffi-dev \
+        libsqlite3-dev \
+        libbz2-dev \
+        liblzma-dev \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
+# ---------------------------------------------------------------------
+# 2. wget 全局静默：仅关闭点状进度条，保留 404/连接失败等错误信息，
+#    避免 GB 级依赖下载的进度输出刷爆构建日志。
+# ---------------------------------------------------------------------
+RUN printf 'verbose = off\n' > /root/.wgetrc
+
+WORKDIR /opt/buildtools
+
+# ---------------------------------------------------------------------
+# 3. Python 3.9.11 自编译（最耗时，前置以复用后续层缓存）
+#    执行脚本硬编码该路径，故不可替换为 apt 的 python3.10。
+# ---------------------------------------------------------------------
+COPY script/python_3.9.11.sh /script/python_3.9.11.sh
+RUN bash /script/python_3.9.11.sh \
+    && rm -rf /opt/buildtools/Python-3.9.11*
+
+# ---------------------------------------------------------------------
+# 4. SWIG（pip 预编译版，免去 bison/autotools 源码编译）
+#    mindio c2python_api.i 出 abi3 wheel 要求 swig >= 4.2。
+#    同时预装 UT 运行期依赖，避免门禁执行时再联网安装。
+# ---------------------------------------------------------------------
+RUN pip3 install -q --no-cache-dir "swig>=4.2,<4.4" \
+    && ln -sf /opt/buildtools/python-3.9.11/bin/swig /usr/local/bin/swig \
+    && swig -version \
+    && pip3 install -q --no-cache-dir \
+        setuptools wheel numpy==1.26.4 lxml beautifulsoup4 requests \
+    && rm -rf /root/.cache/pip
+
+USER root

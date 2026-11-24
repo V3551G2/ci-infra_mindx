@@ -19,6 +19,11 @@ case "$tag" in
     ARCH=x86_64
     supplement=_ut_cpp
     ;;
+  # UT_mindio_cpp 门禁镜像：仅 mindio acp/tft gtest 单测（C/C++ + cmake + swig + lcov + python3.9.11）
+  mindcluster-ut-mindio-cpp-x86_64)
+    ARCH=x86_64
+    supplement=_ut_mindio_cpp
+    ;;
   *)
     echo "Unknown tag: ${tag}"
     exit 1
