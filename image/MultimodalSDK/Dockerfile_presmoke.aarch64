@@ -1,197 +1,79 @@
-# syntax=docker/dockerfile:1
-# =============================================================================
-# Dockerfile —— MultiModalSDK 门禁 PreSmoke 任务镜像
 #
-# 目标镜像 : swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_image:multimodalsdk-presmoke-aarch64-<yyyymmddHHMM>
-# 使用位置 : .gitcode/workflows/.presmoke.yml -> container.image (IMAGE_FLAG)
+# Copyright (c) 2025 Huawei Technologies Co., Ltd. All Rights Reserved.
 #
-# 底座 : multimodalsdk-aarch64（Build_Arm / UT_cpp 合并镜像）
-#        = CANN toolkit 8.3.RC2 + Python3.11.4 + torch-npu 2.9.1。
-#        base 复用同一底座以减少重复层，vllm 运行环境在本镜像内叠加安装。
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# vllm 依赖（据 2026-11-23 门禁失败 run 6fbb9f5dfa6740eabba175125750a1f8 修正）：
-#   test/presmoke/mm_acc/vllm/test_vllm.py 会在 NPU 节点以子进程真实启动
-#   `vllm serve`（OpenAI 兼容服务）并对 image / video 做多模态推理
-#   （fixture vllm_server -> subprocess.Popen(['vllm','serve',...])）。
-#   因此 presmoke 镜像必须预置可用的 vllm + vllm-ascend 运行环境；
-#   原先「vllm / vllm-ascend / mooncake / triton 全链路对 presmoke 冗余」的裁剪
-#   判断已被该失败证伪（报错：FileNotFoundError: 'vllm'）。
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-#   版本与历史可用的 presmoke 环境（mindx_arm:vllm-ascend_v0.23.0rc1）对齐：
-#     vllm 0.23.0 / vllm-ascend 0.23.0rc1 / triton-ascend 3.2.1。
-# =============================================================================
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# This file is a part of the vllm-ascend project.
+#
 
-# 底座由 ci-infra 产出；此处给定默认值，构建时可通过 --build-arg BASE_IMAGE=<实际 tag> 覆盖。
-ARG BASE_IMAGE=swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_image:multimodalsdk-aarch64-202611230343
-FROM ${BASE_IMAGE}
+FROM quay.io/ascend/cann:9.1.0-910b-ubuntu22.04-py3.12
 
-# 统一用 bash：ATB 安装层需 source set_env.sh 且依赖 pipefail
-SHELL ["/bin/bash", "-c"]
-
-ARG PIP_INDEX_URL=https://pypi.org/simple
-ARG PIP_EXTRA_INDEX_URL=https://mirrors.huaweicloud.com/ascend/repos/pypi
+ARG PIP_INDEX_URL="https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
 
 WORKDIR /workspace
 
-# 编译工具链：arctic-inference==0.1.1（vllm-ascend==0.23.0rc1 的强依赖，仅发布 sdist）
-# 安装时需源码编译 C++ 扩展，其 csrc/suffix_decoding/suffix_tree.h 使用 C++20 的 <span>
-# （pip 以 -std=gnu++2a 编译）。base 为兼容 AccSDK 编译把默认 c++/g++ 固定为 gcc-9，
-# GCC 9 的 libstdc++ 无 <span>，直接报 `fatal error: span: No such file or directory`。
-# 这里在 presmoke 层安装 g++-11 并切换默认工具链（仅影响本镜像，不动 base）。
-RUN apt-get update && apt-get install -y --no-install-recommends gcc-11 g++-11 \
- && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110 \
- && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 110 \
- && update-alternatives --set gcc /usr/bin/gcc-11 \
- && update-alternatives --set g++ /usr/bin/g++-11 \
- && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+# Install clang-15 (for triton-ascend) and Mooncake
+ARG MOONCAKE_TAG=0.3.11.post1
+RUN apt-get update -y && \
+    apt-get install -y git vim wget net-tools gcc g++ cmake numactl libnuma-dev libibverbs-dev libjemalloc2 libhiredis-dev clang-15 && \
+    update-alternatives --install /usr/bin/clang clang /usr/bin/clang-15 20 && \
+    update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-15 20 && \
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh && \
+    python3 -m pip install mooncake-transfer-engine-npu==${MOONCAKE_TAG} --extra-index-url https://mirrors.aliyun.com/pypi/web/simple && \
+    rm -rf /var/cache/apt/* && \
+    rm -rf /var/lib/apt/lists/*
 
-# =============================================================================
-# ATB（Ascend Transformer Boost，由 CANN nnal 提供）运行时
-#
-# vllm_ascend worker 在 __init__ 中无条件执行
-#   torch_npu.op_plugin.atb._atb_ops._register_atb_extensions()
-#     -> torch.ops.load_library(${torch_npu}/lib/libop_plugin_atb.so)
-#     -> 该 so 运行时依赖 libatb.so（ATB）
-# 底座 Dockerfile.aarch64 只装 CANN 8.3.RC2 toolkit（明确不含 nnal/ATB），故 presmoke
-# 镜像内缺少 libatb.so，报错链：
-#   OSError: libatb.so: cannot open shared object file: No such file or directory
-#     -> OSError: Could not load this library: .../torch_npu/lib/libop_plugin_atb.so
-#     -> RuntimeError: Engine core initialization failed
-#     -> vLLM server did not become ready within 600s（test_vllm.py 用例失败）
-#
-# 复现历史可用 presmoke 环境（swr.../mindx_arm:vllm-ascend_v0.23.0rc1，docker history
-# 实锤 ATB_HOME_PATH=/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1）的 CANN 9.0.1 +
-# nnal(ATB) 组合：vllm-ascend 0.23.0rc1 要求 torch-npu 2.10.0.post2，该 torch-npu 与
-# CANN 9.0.1/ATB 9.0.1 配套，故同步安装 CANN 9.0.1 toolkit（提供 9.0.1 运行时）+ nnal 9.0.1。
-# =============================================================================
-# ★★ 2026-11-24 根因（权威结论，修正上一版 efd8e5e 构建失败）：
-#   1) vllm-ascend 0.23.0rc1 官方依赖 = CANN 9.0.1 / torch_npu 2.10.0.post2，
-#      故 CANN 9.0.1 必须装（不能退回 8.3.RC2）。
-#   2) 从 CANN 8.5.0 起 `libhccl.so` 已从 toolkit 迁出，改由 **SoC ops 包** 提供：
-#      「9.1.0 之前的社区版本需额外安装 Ascend-cann-{soc}-ops_<ver>_linux-<arch>.run，
-#        否则运行时会报缺少 libhccl.so」。
-#      这正是 efd8e5e 构建失败的原因：只装了 toolkit+nnal，9.0.1 目录下根本没有
-#      libhccl.so，`ldconfig -p | grep -q libhccl.so` 断言不过（exit 1）。
-#   3) 官方安装顺序 = toolkit -> {soc}-ops -> nnal。
-#      SoC 取 910b：vllm-ascend 官方 Dockerfile 默认 SOC_VERSION=ascend910b1。
-#   4) 2026-11-24 run 29 的 `libhccl.so undefined symbol _Z13H2DTlvRequestPvP7tlv_msgS1_`
-#      = 底座 8.3.RC2 的 libhccl 与 9.0.1 运行时混用所致。故 ld.so.conf.d 只放 9.0.1
-#      目录（00- 前缀，高于底座 8.3.RC2 缓存项），并删除底座旧 ascend.conf。
-#   5) 2026-11-24 run 45377723693（64d9789）nnal 安装失败 exit 4 的根因：
-#      上一版 efd8e5e 在装 nnal 之前 `source /usr/local/Ascend/cann/set_env.sh`，
-#      故 Ascend-cann-atb 子安装器的依赖预检（读取 ASCEND_HOME_PATH 等）能通过；
-#      64d9789 误删了这两处 source，导致 ATB 预检失败。此处恢复 source（toolkit/ops
-#      之后、nnal 之前；nnal 之后再 source atb set_env.sh），并在失败时打印 nnal 安装日志。
-ARG CANN_VERSION=9.0.1
-ARG SOC_NAME=910b
-RUN set -euo pipefail \
- && wget -q --no-check-certificate \
-        "https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/CANN%20${CANN_VERSION}/Ascend-cann-toolkit_${CANN_VERSION}_linux-aarch64.run" \
-        "https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/CANN%20${CANN_VERSION}/Ascend-cann-${SOC_NAME}-ops_${CANN_VERSION}_linux-aarch64.run" \
-        "https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/CANN%20${CANN_VERSION}/Ascend-cann-nnal_${CANN_VERSION}_linux-aarch64.run" \
- && chmod +x Ascend-cann-*.run \
- && echo y | "./Ascend-cann-toolkit_${CANN_VERSION}_linux-aarch64.run" --install --force \
- && rm -f "./Ascend-cann-toolkit_${CANN_VERSION}_linux-aarch64.run" \
- && echo y | "./Ascend-cann-${SOC_NAME}-ops_${CANN_VERSION}_linux-aarch64.run" --install --force \
- && rm -f "./Ascend-cann-${SOC_NAME}-ops_${CANN_VERSION}_linux-aarch64.run" \
- && set +eu; source /usr/local/Ascend/cann/set_env.sh 2>/dev/null || true; set -eu \
- && { echo y | "./Ascend-cann-nnal_${CANN_VERSION}_linux-aarch64.run" --install --force \
-      || { echo "[FATAL] nnal(ATB) install failed; ---- ascend_nnal_install.log (tail 200) ----"; \
-           tail -n 200 /var/log/ascend_seclog/ascend_nnal_install.log 2>/dev/null || true; \
-           echo "[FATAL] ---- end of nnal log ----"; exit 1; }; } \
- && rm -f "./Ascend-cann-nnal_${CANN_VERSION}_linux-aarch64.run" \
- && set +eu; source /usr/local/Ascend/nnal/atb/set_env.sh --cxx_abi=1 2>/dev/null || true; set -eu \
- && CANN_ROOT="/usr/local/Ascend/cann" \
- && ATB_LIB_DIR="/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1/lib" \
- && echo "[INFO] all libhccl.so copies:" \
- && find /usr/local/Ascend -name 'libhccl.so' -printf '  %p\n' 2>/dev/null \
- && test -f "${CANN_ROOT}/set_env.sh" \
- && test -f "${CANN_ROOT}/lib64/libhccl.so" \
- && test -f "${ATB_LIB_DIR}/libatb.so" \
- && { echo "${CANN_ROOT}/lib64"; \
-      echo "${CANN_ROOT}/lib64/plugin/opskernel"; \
-      echo "${CANN_ROOT}/lib64/plugin/nnengine"; \
-      echo "${CANN_ROOT}/tools/aml/lib64"; \
-      echo "${CANN_ROOT}/tools/aml/lib64/plugin"; \
-      echo "${ATB_LIB_DIR}"; \
-      echo "/usr/local/Ascend/driver/lib64"; \
-      echo "/usr/local/Ascend/driver/lib64/common"; \
-      echo "/usr/local/Ascend/driver/lib64/driver"; } \
-    | grep -vE '^$' | sort -u > /etc/ld.so.conf.d/00-ascend-cann901.conf \
- && rm -f /etc/ld.so.conf.d/ascend.conf \
- && ldconfig \
- && echo "[INFO] 9.0.1 CANN_ROOT=${CANN_ROOT}" \
- && echo "[INFO] libhccl -> $(ldconfig -p | grep -m1 'libhccl.so')" \
- && echo "[INFO] libatb  -> $(ldconfig -p | grep -m1 'libatb.so')" \
- && ldconfig -p | grep -q 'libhccl.so' \
- && ldconfig -p | grep -q 'libatb.so'
+# Install modelscope (for fast download) and ray (for multinode)
+RUN pip config set global.index-url ${PIP_INDEX_URL} && \
+    python3 -m pip install modelscope 'ray>=2.47.1,<=2.48.0' 'protobuf>3.20.0' && \
+    python3 -m pip cache purge
 
-# =============================================================================
-# CANN / ATB 运行时环境变量（单一 9.0.1，与上面安装的 CANN_ROOT=/usr/local/Ascend/cann 对齐）
-#
-# ★ base 镜像本身不设 LD_LIBRARY_PATH（靠 CANN 安装器写入的 ld.so.cache）。本层不再引用
-#   ascend-toolkit/latest（那是 8.3.RC2），统一指向 9.0.1 的 /usr/local/Ascend/cann；
-#   其余库目录由 00-ascend-cann901.conf + ldconfig 兜底（见上一层）。
-# =============================================================================
-ENV ATB_CXX_ABI=1
-ENV ATB_HOME_PATH=/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1
-ENV ASCEND_HOME_PATH=/usr/local/Ascend/cann
-ENV ASCEND_TOOLKIT_HOME=/usr/local/Ascend/cann
-ENV ASCEND_OPP_PATH=/usr/local/Ascend/cann/opp
-ENV ASCEND_AICPU_PATH=/usr/local/Ascend/cann
-ENV PYTHONPATH=/usr/local/Ascend/cann/python/site-packages
-ENV LD_LIBRARY_PATH=/usr/local/Ascend/cann/lib64:/usr/local/Ascend/cann/lib64/plugin/opskernel:/usr/local/Ascend/cann/lib64/plugin/nnengine:/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1/lib
+# Install vLLM
+ARG VLLM_REPO=https://github.com/vllm-project/vllm.git
+ARG VLLM_TAG=v0.23.0
+ARG VLLM_COMMIT=""
+RUN if [ -n "$VLLM_COMMIT" ]; then \
+      git init /vllm-workspace/vllm && \
+      git -C /vllm-workspace/vllm fetch --depth 1 $VLLM_REPO "$VLLM_COMMIT" && \
+      git -C /vllm-workspace/vllm checkout FETCH_HEAD; \
+    else \
+      git clone --depth 1 -b $VLLM_TAG $VLLM_REPO /vllm-workspace/vllm; \
+    fi
+# In x86, triton will be installed by vllm. But in Ascend, triton doesn't work correctly. we need to uninstall it.
+RUN VLLM_TARGET_DEVICE="empty" python3 -m pip install -e /vllm-workspace/vllm/[audio] --extra-index https://download.pytorch.org/whl/cpu/ && \
+    python3 -m pip uninstall -y triton && \
+    python3 -m pip cache purge
 
-# vllm 运行环境 + 测试依赖：
-#   vllm                             —— test_vllm.py 需要可执行的 `vllm serve` 服务
-#   vllm-ascend / triton-ascend       —— vllm 的 NPU 后端
-#   mooncake-transfer-engine-npu     —— 历史 presmoke 环境的一部分（vllm-ascend 传输引擎）
-#   pytest                           —— run_presmoke.sh 执行 python3 -m pytest test/presmoke/mm_acc/
-#   librosa / einops                 —— 音频等用例 import
-# 注意 1：vllm-ascend==0.23.0rc1 的依赖声明**不含 vllm**，必须显式安装 vllm 本体，
-#         否则镜像内无 `vllm` 可执行文件（报错：FileNotFoundError: 'vllm'）。
-# 注意 2：vllm 0.23.0 声明 torch==2.11.0，vllm-ascend 0.23.0rc1 声明 torch==2.10.0，
-#         若写进同一条 pip install 会联合解析导致 ResolutionImpossible；故拆成两条
-#         独立命令：先装 vllm（torch 2.11.0），再由 vllm-ascend 把 torch 降到 2.10.0
-#         并引入 torch-npu，与历史可用环境（vllm-ascend v0.23.0rc1）形态一致。
-# 注意 3：pip 把可执行脚本装到 /opt/buildtools/python-3.11.4/bin，而该目录不在 PATH 上
-#         （构建日志：WARNING: The script vllm is installed in
-#          '/opt/buildtools/python-3.11.4/bin' which is not on PATH）。
-#         base 镜像的 python_3.11.4.sh 是靠 `ln -sf ${install_dir}/bin/* /usr/local/bin`
-#         让脚本在 PATH（/usr/local/bin）可见，但那只覆盖 base 构建时的脚本；本层新装的
-#         vllm 无软链，故 presmoke 运行时 subprocess 找不到 'vllm'
-#         （FileNotFoundError: 'vllm'）。这里补一次同款软链，暴露新脚本到 /usr/local/bin。
-# 注意 4：vllm 0.23.0 -> tilelang 0.1.9 -> ml-dtypes（未钉版本）。第一条命令装 vllm 时
-#         numpy 尚未被限制，pip 拿到 ml_dtypes 0.7.0（声明 numpy>=2.0.0）；第二条命令把
-#         numpy 降到 1.26.4 后，ml_dtypes 0.7.0 未回退，二者 ABI 不匹配：vllm 启动即崩
-#         （RuntimeError: module was compiled against NumPy C-API version 0x12 (NumPy 2.0)
-#          but the running NumPy has C-API version 0x11 -> ImportError: numpy._core.multiarray
-#          failed to import -> vLLM server did not become ready within 600s）。
-#         故在第二条命令显式钉 ml_dtypes==0.5.1（声明 numpy>=1.23.3，兼容 numpy 1.26.4）。
-RUN python3 -m pip config set global.index-url ${PIP_INDEX_URL} \
- && python3 -m pip config set global.extra-index-url "${PIP_EXTRA_INDEX_URL} https://mirrors.aliyun.com/pypi/web/simple" \
- && python3 -m pip install --no-cache-dir \
-        --extra-index-url https://download.pytorch.org/whl/cpu/ \
-        vllm==0.23.0 \
- && python3 -m pip install --no-cache-dir \
-        vllm-ascend==0.23.0rc1 \
-        triton-ascend==3.2.1 \
-        mooncake-transfer-engine-npu==0.3.11.post1 \
-        ml_dtypes==0.5.1 \
-        pytest \
-        librosa \
-        einops \
- && ln -sf /opt/buildtools/python-3.11.4/bin/* /usr/local/bin \
- && python3 -m pip cache purge
+# Install vllm-ascend
+ARG SOC_VERSION="ascend910b1"
+ARG COMPILE_CUSTOM_KERNELS=1
+ENV DEBIAN_FRONTEND=noninteractive
+ENV SOC_VERSION=$SOC_VERSION \
+    TASK_QUEUE_ENABLE=1 \
+    OMP_NUM_THREADS=1
+COPY . /vllm-workspace/vllm-ascend/
 
-# =============================================================================
-# 构建期自检（关键）：把「坏镜像」拦在构建阶段，避免再浪费一次 20+ 分钟门禁运行。
-# 复现 run 29 的失败模式：dlopen libhccl.so 时若符号解析不了，会抛
-#   OSError: ...libhccl.so: undefined symbol: ...（即 run 29 的 torch_npu 加载失败根因）
-# 同理验证 libatb.so（ATB）。二者都能 dlopen 才允许出镜像。
-# =============================================================================
-RUN set -euo pipefail \
- && python3 -c "import ctypes,sys; ctypes.CDLL('libhccl.so'); ctypes.CDLL('libatb.so'); print('[INFO] dlopen libhccl/libatb OK')" \
- && ldconfig -p | grep -E 'libhccl\.so|libatb\.so'
+RUN export PIP_EXTRA_INDEX_URL="https://mirrors.huaweicloud.com/ascend/repos/pypi" && \
+    export VLLM_BATCH_INVARIANT=1 && \
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh && \
+    source /usr/local/Ascend/nnal/atb/set_env.sh && \
+    python3 -m pip install -e /vllm-workspace/vllm-ascend/ --extra-index https://download.pytorch.org/whl/cpu/ && \
+    python3 -m pip uninstall -y triton triton-ascend && \
+    python3 -m pip install triton-ascend==3.2.2 --extra-index-url https://mirrors.huaweicloud.com/ascend/repos/pypi && \
+    python3 -m pip install concurrent-log-handler && \
+    python3 -m pip cache purge
+
+# Append `libascend_hal.so` path (devlib) to LD_LIBRARY_PATH
+RUN echo "export LD_PRELOAD=/usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2:$LD_PRELOAD" >> ~/.bashrc
+RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib" >> ~/.bashrc
 
 CMD ["/bin/bash"]
