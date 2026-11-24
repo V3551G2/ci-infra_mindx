@@ -25,6 +25,9 @@
 ARG BASE_IMAGE=swr.cn-north-4.myhuaweicloud.com/ascend-mindx/mindx_image:multimodalsdk-aarch64-202611230343
 FROM ${BASE_IMAGE}
 
+# 统一用 bash：ATB 安装层需 source set_env.sh 且依赖 pipefail
+SHELL ["/bin/bash", "-c"]
+
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ARG PIP_EXTRA_INDEX_URL=https://mirrors.huaweicloud.com/ascend/repos/pypi
 
@@ -41,6 +44,46 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc-11 g++-11 \
  && update-alternatives --set gcc /usr/bin/gcc-11 \
  && update-alternatives --set g++ /usr/bin/g++-11 \
  && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+
+# =============================================================================
+# ATB（Ascend Transformer Boost，由 CANN nnal 提供）运行时
+#
+# vllm_ascend worker 在 __init__ 中无条件执行
+#   torch_npu.op_plugin.atb._atb_ops._register_atb_extensions()
+#     -> torch.ops.load_library(${torch_npu}/lib/libop_plugin_atb.so)
+#     -> 该 so 运行时依赖 libatb.so（ATB）
+# 底座 Dockerfile.aarch64 只装 CANN 8.3.RC2 toolkit（明确不含 nnal/ATB），故 presmoke
+# 镜像内缺少 libatb.so，报错链：
+#   OSError: libatb.so: cannot open shared object file: No such file or directory
+#     -> OSError: Could not load this library: .../torch_npu/lib/libop_plugin_atb.so
+#     -> RuntimeError: Engine core initialization failed
+#     -> vLLM server did not become ready within 600s（test_vllm.py 用例失败）
+#
+# 复现历史可用 presmoke 环境（swr.../mindx_arm:vllm-ascend_v0.23.0rc1，docker history
+# 实锤 ATB_HOME_PATH=/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1）的 CANN 9.0.1 +
+# nnal(ATB) 组合：vllm-ascend 0.23.0rc1 要求 torch-npu 2.10.0.post2，该 torch-npu 与
+# CANN 9.0.1/ATB 9.0.1 配套，故同步安装 CANN 9.0.1 toolkit（提供 9.0.1 运行时）+ nnal 9.0.1。
+# =============================================================================
+ARG CANN_VERSION=9.0.1
+RUN set -euo pipefail \
+ && wget -q --no-check-certificate \
+        "https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/CANN%20${CANN_VERSION}/Ascend-cann-toolkit_${CANN_VERSION}_linux-aarch64.run" \
+        "https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/CANN%20${CANN_VERSION}/Ascend-cann-nnal_${CANN_VERSION}_linux-aarch64.run" \
+ && chmod +x Ascend-cann-*.run \
+ && echo y | "./Ascend-cann-toolkit_${CANN_VERSION}_linux-aarch64.run" --install --force \
+ && set +eu; source /usr/local/Ascend/ascend-toolkit/set_env.sh; set -eu \
+ && echo y | "./Ascend-cann-nnal_${CANN_VERSION}_linux-aarch64.run" --install --force \
+ && rm -f Ascend-cann-*.run \
+ && ATB_LIB_DIR="/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1/lib" \
+ && test -f "${ATB_LIB_DIR}/libatb.so" \
+ && echo "${ATB_LIB_DIR}" > /etc/ld.so.conf.d/atb.conf \
+ && ldconfig \
+ && echo "[INFO] ATB ready: $(ls -l ${ATB_LIB_DIR}/libatb.so)"
+
+# ATB 加速库环境变量（与历史可用环境一致；PyPI torch/torch-npu wheel 为 CXX11 ABI）
+ENV ATB_CXX_ABI=1
+ENV ATB_HOME_PATH=/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1
+ENV LD_LIBRARY_PATH=/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1/lib
 
 # vllm 运行环境 + 测试依赖：
 #   vllm                             —— test_vllm.py 需要可执行的 `vllm serve` 服务
