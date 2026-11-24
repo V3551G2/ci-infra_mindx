@@ -73,17 +73,42 @@ RUN set -euo pipefail \
  && echo y | "./Ascend-cann-toolkit_${CANN_VERSION}_linux-aarch64.run" --install --force \
  && set +eu; source /usr/local/Ascend/ascend-toolkit/set_env.sh; set -eu \
  && echo y | "./Ascend-cann-nnal_${CANN_VERSION}_linux-aarch64.run" --install --force \
+ && set +eu; [ -f /usr/local/Ascend/nnal/atb/set_env.sh ] && source /usr/local/Ascend/nnal/atb/set_env.sh --cxx_abi=1; set -eu \
  && rm -f Ascend-cann-*.run \
  && ATB_LIB_DIR="/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1/lib" \
  && test -f "${ATB_LIB_DIR}/libatb.so" \
- && echo "${ATB_LIB_DIR}" > /etc/ld.so.conf.d/atb.conf \
+ && { printf '%s' "${LD_LIBRARY_PATH}" | tr ':' '\n' | grep -E '^/usr/local/Ascend' || true; \
+      find /usr/local/Ascend -name 'libhccl.so' -printf '%h\n' 2>/dev/null || true; \
+      echo "${ATB_LIB_DIR}"; \
+      echo "/usr/local/Ascend/driver/lib64"; \
+      echo "/usr/local/Ascend/driver/lib64/common"; \
+      echo "/usr/local/Ascend/driver/lib64/driver"; } \
+    | grep -vE '^$' | sort -u > /etc/ld.so.conf.d/ascend.conf \
  && ldconfig \
- && echo "[INFO] ATB ready: $(ls -l ${ATB_LIB_DIR}/libatb.so)"
+ && ldconfig -p | grep -q 'libhccl.so' \
+ && ldconfig -p | grep -q 'libatb.so' \
+ && echo "[INFO] Ascend libs resolved: $(ldconfig -p | grep -cE 'libhccl.so|libatb.so') (hccl/atb)"
 
-# ATB 加速库环境变量（与历史可用环境一致；PyPI torch/torch-npu wheel 为 CXX11 ABI）
+# =============================================================================
+# CANN / ATB 运行时环境变量（与历史可用 presmoke 镜像对齐）
+#
+# ★ 必须显式设置 LD_LIBRARY_PATH：base 镜像（CANN 8.3.RC2 toolkit）本身**不设**
+#   LD_LIBRARY_PATH，运行时靠 CANN 安装器写入的 ld.so.cache 定位 lib64。本层安装
+#   CANN 9.0.1 会替换 ascend-toolkit/latest，使原 8.3.RC2 的缓存项失效；若此处只给
+#   ATB 目录而不含 9.0.1 的 lib64，torch_npu._C import 立即失败：
+#     ImportError: libhccl.so: cannot open shared object file ... run 'source set_env.sh'
+#   -> RuntimeError: Failed to load the backend extension: torch_npu（presmoke 12 errors）
+#   故这里给出「CANN toolkit lib64 + driver lib64 + nnal ATB lib」完整路径，并用
+#   ld.so.conf.d + ldconfig 双保险（上面已校验 libhccl.so / libatb.so 均可解析）。
+# =============================================================================
 ENV ATB_CXX_ABI=1
 ENV ATB_HOME_PATH=/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1
-ENV LD_LIBRARY_PATH=/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1/lib
+ENV ASCEND_HOME_PATH=/usr/local/Ascend/ascend-toolkit/latest
+ENV ASCEND_TOOLKIT_HOME=/usr/local/Ascend/ascend-toolkit/latest
+ENV ASCEND_OPP_PATH=/usr/local/Ascend/ascend-toolkit/latest/opp
+ENV ASCEND_AICPU_PATH=/usr/local/Ascend/ascend-toolkit/latest
+ENV PYTHONPATH=/usr/local/Ascend/ascend-toolkit/latest/python/site-packages
+ENV LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/tools/aml/lib64:/usr/local/Ascend/ascend-toolkit/latest/tools/aml/lib64/plugin:/usr/local/Ascend/ascend-toolkit/latest/lib64:/usr/local/Ascend/ascend-toolkit/latest/lib64/plugin/opskernel:/usr/local/Ascend/ascend-toolkit/latest/lib64/plugin/nnengine:/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1/lib
 
 # vllm 运行环境 + 测试依赖：
 #   vllm                             —— test_vllm.py 需要可执行的 `vllm serve` 服务
