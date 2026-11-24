@@ -60,7 +60,14 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV SOC_VERSION=$SOC_VERSION \
     TASK_QUEUE_ENABLE=1 \
     OMP_NUM_THREADS=1
-COPY . /vllm-workspace/vllm-ascend/
+
+# ci-infra 的 build context 是 image/MultimodalSDK/（不是 vllm-ascend 仓库），
+# 无法使用官方 Dockerfile 的 `COPY . /vllm-workspace/vllm-ascend/`（context 里没有
+# vllm-ascend 源码，后续 `pip install -e` 会报 does not appear to be a Python project）。
+# 改为按 tag 克隆源码，tag 与 pip 依赖 vllm-ascend==0.23.0rc1 对齐。
+ARG VLLM_ASCEND_REPO=https://github.com/vllm-project/vllm-ascend.git
+ARG VLLM_ASCEND_TAG=v0.23.0rc1
+RUN git clone --depth 1 -b ${VLLM_ASCEND_TAG} ${VLLM_ASCEND_REPO} /vllm-workspace/vllm-ascend
 
 RUN export PIP_EXTRA_INDEX_URL="https://mirrors.huaweicloud.com/ascend/repos/pypi" && \
     export VLLM_BATCH_INVARIANT=1 && \
