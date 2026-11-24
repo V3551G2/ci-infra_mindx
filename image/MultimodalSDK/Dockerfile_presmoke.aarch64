@@ -64,6 +64,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc-11 g++-11 \
 # nnal(ATB) 组合：vllm-ascend 0.23.0rc1 要求 torch-npu 2.10.0.post2，该 torch-npu 与
 # CANN 9.0.1/ATB 9.0.1 配套，故同步安装 CANN 9.0.1 toolkit（提供 9.0.1 运行时）+ nnal 9.0.1。
 # =============================================================================
+# ★★ 2026-11-24 run 29 实测的关键事实：CANN 9.0.1 toolkit 装到 **/usr/local/Ascend/cann**
+#    （安装器提示 `source /usr/local/Ascend/cann/set_env.sh`），而底座自带的是
+#    /usr/local/Ascend/ascend-toolkit/{8.3.RC2,latest->8.3.RC2}。
+#    上一版（4b0fb9f）把 ascend-toolkit/latest/lib64(8.3.RC2) 和 9.0.1 运行时同时放进搜索
+#    路径 → libhccl.so 命中 8.3.RC2 副本、其宿主侧符号由 9.0.1 运行时提供 → 版本错配：
+#      ImportError: .../ascend-toolkit/8.3.RC2/.../libhccl.so: undefined symbol:
+#                   _Z13H2DTlvRequestPvP7tlv_msgS1_
+#      -> RuntimeError: Failed to load the backend extension: torch_npu（presmoke 12 errors）
+#    故本层改为「单一 9.0.1」：动态探测 9.0.1 根目录，用 00- 前缀的 ld.so.conf.d 把它的库目录
+#    以最高优先级写入（先于底座 8.3.RC2 的缓存项），并彻底移除 8.3.RC2 目录引用。
 ARG CANN_VERSION=9.0.1
 RUN set -euo pipefail \
  && wget -q --no-check-certificate \
@@ -71,44 +81,45 @@ RUN set -euo pipefail \
         "https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/CANN%20${CANN_VERSION}/Ascend-cann-nnal_${CANN_VERSION}_linux-aarch64.run" \
  && chmod +x Ascend-cann-*.run \
  && echo y | "./Ascend-cann-toolkit_${CANN_VERSION}_linux-aarch64.run" --install --force \
- && set +eu; source /usr/local/Ascend/ascend-toolkit/set_env.sh; set -eu \
+ && set +eu; source /usr/local/Ascend/cann/set_env.sh 2>/dev/null || source /usr/local/Ascend/ascend-toolkit/set_env.sh; set -eu \
  && echo y | "./Ascend-cann-nnal_${CANN_VERSION}_linux-aarch64.run" --install --force \
  && set +eu; [ -f /usr/local/Ascend/nnal/atb/set_env.sh ] && source /usr/local/Ascend/nnal/atb/set_env.sh --cxx_abi=1; set -eu \
  && rm -f Ascend-cann-*.run \
  && ATB_LIB_DIR="/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1/lib" \
  && test -f "${ATB_LIB_DIR}/libatb.so" \
- && { printf '%s' "${LD_LIBRARY_PATH}" | tr ':' '\n' | grep -E '^/usr/local/Ascend' || true; \
-      find /usr/local/Ascend -name 'libhccl.so' -printf '%h\n' 2>/dev/null || true; \
+ && CANN_ROOT="$(cd "$(dirname "$(ls -d /usr/local/Ascend/cann*/set_env.sh 2>/dev/null | head -n1)")" && pwd)" \
+ && test -f "${CANN_ROOT}/set_env.sh" \
+ && echo "[INFO] 9.0.1 CANN_ROOT=${CANN_ROOT}" \
+ && echo "[INFO] all libhccl.so copies:" \
+ && find /usr/local/Ascend -name 'libhccl.so' -printf '  %p\n' 2>/dev/null \
+ && { find "${CANN_ROOT}" -maxdepth 3 -type d \( -name lib64 -o -name lib \) -printf '%p\n' 2>/dev/null || true; \
       echo "${ATB_LIB_DIR}"; \
       echo "/usr/local/Ascend/driver/lib64"; \
       echo "/usr/local/Ascend/driver/lib64/common"; \
       echo "/usr/local/Ascend/driver/lib64/driver"; } \
-    | grep -vE '^$' | sort -u > /etc/ld.so.conf.d/ascend.conf \
+    | grep -vE '^$' | sort -u > /etc/ld.so.conf.d/00-ascend-cann901.conf \
+ && rm -f /etc/ld.so.conf.d/ascend.conf \
  && ldconfig \
+ && echo "[INFO] libhccl -> $(ldconfig -p | grep -m1 'libhccl.so')" \
+ && echo "[INFO] libatb  -> $(ldconfig -p | grep -m1 'libatb.so')" \
  && ldconfig -p | grep -q 'libhccl.so' \
- && ldconfig -p | grep -q 'libatb.so' \
- && echo "[INFO] Ascend libs resolved: $(ldconfig -p | grep -cE 'libhccl.so|libatb.so') (hccl/atb)"
+ && ldconfig -p | grep -q 'libatb.so'
 
 # =============================================================================
-# CANN / ATB 运行时环境变量（与历史可用 presmoke 镜像对齐）
+# CANN / ATB 运行时环境变量（单一 9.0.1，与上面安装的 CANN_ROOT=/usr/local/Ascend/cann 对齐）
 #
-# ★ 必须显式设置 LD_LIBRARY_PATH：base 镜像（CANN 8.3.RC2 toolkit）本身**不设**
-#   LD_LIBRARY_PATH，运行时靠 CANN 安装器写入的 ld.so.cache 定位 lib64。本层安装
-#   CANN 9.0.1 会替换 ascend-toolkit/latest，使原 8.3.RC2 的缓存项失效；若此处只给
-#   ATB 目录而不含 9.0.1 的 lib64，torch_npu._C import 立即失败：
-#     ImportError: libhccl.so: cannot open shared object file ... run 'source set_env.sh'
-#   -> RuntimeError: Failed to load the backend extension: torch_npu（presmoke 12 errors）
-#   故这里给出「CANN toolkit lib64 + driver lib64 + nnal ATB lib」完整路径，并用
-#   ld.so.conf.d + ldconfig 双保险（上面已校验 libhccl.so / libatb.so 均可解析）。
+# ★ base 镜像本身不设 LD_LIBRARY_PATH（靠 CANN 安装器写入的 ld.so.cache）。本层不再引用
+#   ascend-toolkit/latest（那是 8.3.RC2），统一指向 9.0.1 的 /usr/local/Ascend/cann；
+#   其余库目录由 00-ascend-cann901.conf + ldconfig 兜底（见上一层）。
 # =============================================================================
 ENV ATB_CXX_ABI=1
 ENV ATB_HOME_PATH=/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1
-ENV ASCEND_HOME_PATH=/usr/local/Ascend/ascend-toolkit/latest
-ENV ASCEND_TOOLKIT_HOME=/usr/local/Ascend/ascend-toolkit/latest
-ENV ASCEND_OPP_PATH=/usr/local/Ascend/ascend-toolkit/latest/opp
-ENV ASCEND_AICPU_PATH=/usr/local/Ascend/ascend-toolkit/latest
-ENV PYTHONPATH=/usr/local/Ascend/ascend-toolkit/latest/python/site-packages
-ENV LD_LIBRARY_PATH=/usr/local/Ascend/ascend-toolkit/latest/tools/aml/lib64:/usr/local/Ascend/ascend-toolkit/latest/tools/aml/lib64/plugin:/usr/local/Ascend/ascend-toolkit/latest/lib64:/usr/local/Ascend/ascend-toolkit/latest/lib64/plugin/opskernel:/usr/local/Ascend/ascend-toolkit/latest/lib64/plugin/nnengine:/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1/lib
+ENV ASCEND_HOME_PATH=/usr/local/Ascend/cann
+ENV ASCEND_TOOLKIT_HOME=/usr/local/Ascend/cann
+ENV ASCEND_OPP_PATH=/usr/local/Ascend/cann/opp
+ENV ASCEND_AICPU_PATH=/usr/local/Ascend/cann
+ENV PYTHONPATH=/usr/local/Ascend/cann/python/site-packages
+ENV LD_LIBRARY_PATH=/usr/local/Ascend/cann/lib64:/usr/local/Ascend/cann/lib64/plugin/opskernel:/usr/local/Ascend/cann/lib64/plugin/nnengine:/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/common:/usr/local/Ascend/driver/lib64/driver:/usr/local/Ascend/nnal/atb/latest/atb/cxx_abi_1/lib
 
 # vllm 运行环境 + 测试依赖：
 #   vllm                             —— test_vllm.py 需要可执行的 `vllm serve` 服务
@@ -151,5 +162,15 @@ RUN python3 -m pip config set global.index-url ${PIP_INDEX_URL} \
         einops \
  && ln -sf /opt/buildtools/python-3.11.4/bin/* /usr/local/bin \
  && python3 -m pip cache purge
+
+# =============================================================================
+# 构建期自检（关键）：把「坏镜像」拦在构建阶段，避免再浪费一次 20+ 分钟门禁运行。
+# 复现 run 29 的失败模式：dlopen libhccl.so 时若符号解析不了，会抛
+#   OSError: ...libhccl.so: undefined symbol: ...（即 run 29 的 torch_npu 加载失败根因）
+# 同理验证 libatb.so（ATB）。二者都能 dlopen 才允许出镜像。
+# =============================================================================
+RUN set -euo pipefail \
+ && python3 -c "import ctypes,sys; ctypes.CDLL('libhccl.so'); ctypes.CDLL('libatb.so'); print('[INFO] dlopen libhccl/libatb OK')" \
+ && ldconfig -p | grep -E 'libhccl\.so|libatb\.so'
 
 CMD ["/bin/bash"]
