@@ -14,12 +14,8 @@ case "$tag" in
     ARCH=x86_64
     supplement=_ut_python
     ;;
-  # UT_cpp 门禁镜像：仅 ascend-docker-runtime cli 单测（C/C++ + cmake + lcov）
-  mindcluster-ut_cpp-x86_64)
-    ARCH=x86_64
-    supplement=_ut_cpp
-    ;;
-  # UT_mindio_cpp 门禁镜像：仅 mindio acp/tft gtest 单测（C/C++ + cmake + swig + lcov + python3.9.11）
+  # UT_cpp + UT_mindio_cpp 统一门禁镜像：C/C++ + cmake + swig + lcov + python3.9.11，
+  # 两个 UT 作业（ascend-docker-runtime cli 单测 / mindio acp·tft 单测）共用同一镜像
   mindcluster-ut-mindio-cpp-x86_64)
     ARCH=x86_64
     supplement=_ut_mindio_cpp

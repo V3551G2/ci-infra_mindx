@@ -1,21 +1,34 @@
 # syntax=docker/dockerfile:1
 # =====================================================================
-# 门禁镜像：UT_mindio_cpp（tag: mindcluster-ut-mindio-cpp-x86_64）
+# 门禁镜像：UT_cpp + UT_mindio_cpp 统一镜像（tag: mindcluster-ut-mindio-cpp-x86_64）
 #
-# 任务入口（Ascend/mind-cluster）：
-#   .gitcode/workflows/.ut_mindio_cpp.yml                    # UT_mindio_cpp job 定义
-#     └─ .gitcode/workflows/scripts/ut_mindio_cpp_execute.sh # 容器内执行入口
-#          ├─ component/mindio/acp/scripts/run_gtest_ut.sh   # 始终执行：acp gtest UT + lcov
-#          └─ component/mindio/tft/test/run_gtest_dt.sh      # tft 变更时：tft gtest UT + lcov
+# 两个 C/C++ 门禁任务共用本镜像，避免重复构建、减少镜像种类：
+#   1) UT_cpp（Ascend/mind-cluster）
+#        .gitcode/workflows/.ut_cpp.yml                    # UT_cpp job 定义
+#          └─ .gitcode/workflows/scripts/ut_cpp_execute.sh # 容器内执行入口
+#               └─ component/ascend-docker-runtime/cli/test/dt/build.sh
+#   2) UT_mindio_cpp（Ascend/mind-cluster）
+#        .gitcode/workflows/.ut_mindio_cpp.yml                    # UT_mindio_cpp job 定义
+#          └─ .gitcode/workflows/scripts/ut_mindio_cpp_execute.sh # 容器内执行入口
+#               ├─ component/mindio/acp/scripts/run_gtest_ut.sh   # 始终执行：acp gtest UT + lcov
+#               └─ component/mindio/tft/test/run_gtest_dt.sh      # tft 变更时：tft gtest UT + lcov
 #
-# 该 job 的真实依赖（由上述脚本与 component/mindio/**/CMakeLists.txt 推导）：
-#   gcc/g++/make   : C/C++ 编译（build-essential）
-#   cmake(>=3.18)  : acp / tft / test 的 CMake 构建；apt 版 3.22 已满足，无需自编译
-#   swig(>=4.2)    : c2python_api.i -> _c2python_api.so，acp abi3 wheel 要求（改用 pip 安装）
+# 两者真实依赖的并集（由上述脚本与 CMakeLists.txt 推导）：
+#   gcc-9/g++-9    : 见下方「关键约束」，UT_cpp 必须用 gcc-9 作为默认编译器
+#   make           : C/C++ 编译（build-essential）
+#   cmake(>=3.18)  : acp / tft / dt 的 CMake 构建；apt 版 3.22 已满足，无需自编译
+#   swig(>=4.2)    : mindio c2python_api.i -> _c2python_api.so，acp abi3 wheel 要求（改用 pip 安装）
 #   python3.9.11   : 执行脚本硬编码 /opt/buildtools/python-3.9.11，用于 setup.py bdist_wheel
 #   lcov(1.x)      : 覆盖率报告，脚本依赖 `--rc lcov_branch_coverage=1`（lcov 2.x 已移除）
 #   git/dos2unix/ca-certificates : 三方源码 clone 与 CRLF 处理
 #   libnuma-dev    : memfs/bmm/bmm_pool.cpp `#include <numa.h>`
+#
+# 关键约束（务必保留）：默认编译器固定在 gcc-9。
+#   UT_cpp 的 dt 构建用 cmake 编译 googletest 1.10.0 / mockcpp v2.7，而 googletest 自带
+#   `-Werror`；在 gcc >= 10 下 gtest-death-test.cc 会触发 `-Werror=maybe-uninitialized`
+#   误报导致编译中断。gcc-9 与这些 2019 年前后的三方库同期，无此问题（与 IndexSDK
+#   ut_cpp 镜像同一策略）；同时 gcc-9 完整支持 mindio 用到的 C++11/C++17，故作为共同基线。
+#   因此安装 gcc-9/g++-9，并用 update-alternatives 将 /usr/bin/{gcc,g++,cc,c++} 指向 gcc-9。
 #
 # 相比原「cluster 大镜像」已删除与本 job 无关的依赖（分别属 UT_go/UT_python/Build 任务）：
 #   Go 1.21.12 + gocov/gotestsum、musl、volcano 源码、torch 2.7.1+cpu(~733MB)、
@@ -28,10 +41,13 @@ ENV DEBIAN_FRONTEND=${DEBIAN_FRONTEND}
 
 # ---------------------------------------------------------------------
 # 1. 系统依赖：单层一次性装齐，禁用推荐包，装完立即清理 apt 缓存/索引
+#    gcc-9/g++-9 + update-alternatives：把默认编译器退回 gcc-9（原因见文件头「关键约束」）
 # ---------------------------------------------------------------------
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
+        gcc-9 \
+        g++-9 \
         cmake \
         lcov \
         git \
@@ -45,6 +61,11 @@ RUN apt-get update \
         libsqlite3-dev \
         libbz2-dev \
         liblzma-dev \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 90 \
+    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 90 \
+    && update-alternatives --install /usr/bin/cc cc /usr/bin/gcc-9 90 \
+    && update-alternatives --install /usr/bin/c++ c++ /usr/bin/g++-9 90 \
+    && gcc --version \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/*
 
 # ---------------------------------------------------------------------
