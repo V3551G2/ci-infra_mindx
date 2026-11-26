@@ -58,3 +58,6 @@ docker build \
   "${SCRIPT_DIR}"
 
 echo "Image built: ${IMAGE_TAG}"
+IMAGE_SIZE_BYTES="$(docker image inspect -f '{{.Size}}' "${IMAGE_TAG}")"
+echo "Image size : $(awk -v b="${IMAGE_SIZE_BYTES}" 'BEGIN{printf "%.2f GB (%d bytes)", b/1024/1024/1024, b}')"
+docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' "${IMAGE_TAG}"
