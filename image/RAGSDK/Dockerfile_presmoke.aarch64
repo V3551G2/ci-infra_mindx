@@ -10,7 +10,6 @@
 #   (见 RAGSDK/docker/OVERVIEW.zh.md)，镜像不再内置 HDK 驱动。
 #   与编译镜像同理，RAGSDK 无 C/C++/Go/NPU 编译，故不装 gcc7.5/devtoolset/cmake/ninja/
 #   swig/meson/faiss/googletest/golang/lcov/mindspore/torch-npu(2.1.0)/volcano 等冗余组件。
-# original Dockerfile: https://github.com/vllm-project/vllm-ascend/blob/releases/v0.23.0/Dockerfile
 FROM ubuntu:22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
