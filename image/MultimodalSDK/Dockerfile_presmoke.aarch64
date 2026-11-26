@@ -101,4 +101,40 @@ RUN printf 'numpy==1.26.4\nscipy==1.13.1\ndecorator==5.1.1\n' > /tmp/presmoke_co
 RUN echo "export LD_PRELOAD=/usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2:$LD_PRELOAD" >> ~/.bashrc
 RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib" >> ~/.bashrc
 
+# 体积优化（A 档，低风险）：删除 CANN 中仅用于开发/调试/CPU 仿真、运行期不会被加载的组件
+# （约 0.86GB）。刻意保留 devlib（含 libascend_hal.so 等链接桩）、lib64 动态库、bishengir/
+# bisheng_compiler/hcc 编译链、ops_transformer/ops_nn/ops_cv/ops_legacy 预编译内核，
+# 以及 nnal/atb 全量——这些都可能是运行期或后续 JIT 回退所需。
+#
+# 注意：/usr/local/Ascend 来自基础镜像的单个 COPY 层（10.6GB）。单阶段 Dockerfile 中删除
+# 其子目录只会新增白化条目，`docker images` 体积不变；因此必须配合 docker_build.sh 中的
+# “压平(squash)”（docker export | docker import）步骤，让被删除的真实文件从镜像中消失。
+RUN echo "[size] /usr/local/Ascend before trim:" && du -sh /usr/local/Ascend && \
+    rm -rf \
+      /usr/local/Ascend/cann-9.1.0/aarch64-linux/simulator \
+      /usr/local/Ascend/cann-9.1.0/aarch64-linux/include \
+      /usr/local/Ascend/cann-9.1.0/aarch64-linux/pkg_inc \
+      /usr/local/Ascend/cann-9.1.0/tools/msdebug \
+      /usr/local/Ascend/cann-9.1.0/tools/profiler \
+      /usr/local/Ascend/cann-9.1.0/tools/mssanitizer \
+      /usr/local/Ascend/cann-9.1.0/tools/msopprof \
+      /usr/local/Ascend/cann-9.1.0/tools/cpudebug \
+      /usr/local/Ascend/cann-9.1.0/tools/msmemscope \
+      /usr/local/Ascend/cann-9.1.0/tools/ascend_system_advisor \
+      /usr/local/Ascend/cann-9.1.0/tools/mstx \
+      /usr/local/Ascend/cann-9.1.0/tools/hccl_test \
+      /usr/local/Ascend/cann-9.1.0/tools/opbuild \
+      /usr/local/Ascend/cann-9.1.0/tools/msopgen \
+      /usr/local/Ascend/cann-9.1.0/tools/operator_cmp \
+      /usr/local/Ascend/cann-9.1.0/tools/op_project_templates \
+      /usr/local/Ascend/cann-9.1.0/tools/new_op_project_template \
+      /usr/local/Ascend/cann-9.1.0/tools/show_kernel_debug_data \
+      /usr/local/Ascend/cann-9.1.0/tools/optype_collector \
+      /usr/local/Ascend/cann-9.1.0/tools/msobjdump \
+      /usr/local/Ascend/cann-9.1.0/tools/ms_fmk_transplt \
+      /usr/local/Ascend/cann-9.1.0/opp/built-in/op_impl/ai_core/tbe/kernel/ascend910_93 && \
+    find /usr/local/Ascend -type f -name '*.whl' -delete && \
+    find /usr/local/Ascend -type f -name '*.a' -delete && \
+    echo "[size] /usr/local/Ascend after trim:" && du -sh /usr/local/Ascend
+
 CMD ["/bin/bash"]
