@@ -94,11 +94,15 @@ RUN echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib" >> ~/.bashrc
 # 注意：/usr/local/Ascend 来自基础镜像的单个 COPY 层（10.6GB）。单阶段 Dockerfile 中删除
 # 其子目录只会新增白化条目，`docker images` 体积不变；因此必须配合 docker_build.sh 中的
 # “压平(squash)”（docker export | docker import）步骤，让被删除的真实文件从镜像中消失。
+#
+# 注意：aarch64-linux/include 与 aarch64-linux/pkg_inc 不能裁剪。vllm-ascend 运行期经
+# triton-ascend JIT 编译 npu_utils.cpp 时会显式引用
+#   -I/usr/local/Ascend/cann-9.1.0/include  -I/usr/local/Ascend/cann-9.1.0/pkg_inc
+# 并 #include "runtime/runtime/rt.h"；删除这两个目录会导致编译报 'rt.h' file not found，
+# vLLM 服务起不来，预冒烟的 vllm 用例即失败。
 RUN echo "[size] /usr/local/Ascend before trim:" && du -sh /usr/local/Ascend && \
     rm -rf \
       /usr/local/Ascend/cann-9.1.0/aarch64-linux/simulator \
-      /usr/local/Ascend/cann-9.1.0/aarch64-linux/include \
-      /usr/local/Ascend/cann-9.1.0/aarch64-linux/pkg_inc \
       /usr/local/Ascend/cann-9.1.0/tools/msdebug \
       /usr/local/Ascend/cann-9.1.0/tools/profiler \
       /usr/local/Ascend/cann-9.1.0/tools/mssanitizer \
